@@ -2,10 +2,10 @@
 // Base types for raw, unprocessed intelligence data points
 
 import { PrimaryIntelSource } from './Sources';
-import { SourceQuality, InformationVisibility, ContentSensitivity, QualityAssessment } from './Classification';
+import { SourceQuality, InformationVisibility, ContentSensitivity, QualityAssessment, ClassificationLevel } from './Classification';
 
 // Re-export quality types for convenience
-export type { SourceQuality, InformationVisibility, ContentSensitivity, QualityAssessment } from './Classification';
+export type { SourceQuality, InformationVisibility, ContentSensitivity, QualityAssessment, ClassificationLevel } from './Classification';
 
 export type ReliabilityRating = 
   | 'A' // Completely reliable
@@ -27,6 +27,10 @@ export interface Intel {
   reliability: ReliabilityRating;
   timestamp: number;
   collectedBy: string; // Collector/sensor ID
+  /**
+   * Deprecated: retained for backward compatibility; no security controls enforced.
+   */
+  classification?: ClassificationLevel;
   
   // Geographic context
   latitude?: number;
@@ -56,6 +60,24 @@ export interface Intel {
 }
 
 /**
+ * Processed Intelligence Artifact
+ * Represents enriched intelligence derived from raw intel plus analysis context.
+ */
+export interface Intelligence extends Intel {
+  confidence?: number;
+  implications?: string[];
+  recommendations?: string[];
+  derivedFrom?: {
+    observations?: string[];
+    patterns?: string[];
+    evidence?: string[];
+    indicators?: string[];
+    rawData?: string[];
+    artifacts?: string[];
+  };
+}
+
+/**
  * Basic Intel Collection Requirements
  * Defines what kind of intelligence is needed
  */
@@ -63,6 +85,7 @@ export interface IntelRequirement {
   id: string;
   priority: 'IMMEDIATE' | 'PRIORITY' | 'ROUTINE';
   description: string;
+  title?: string;
   targetLocation?: {
     latitude: number;
     longitude: number;
@@ -73,6 +96,10 @@ export interface IntelRequirement {
   minQualityLevel: SourceQuality; // Minimum acceptable source quality
   desiredVisibility: InformationVisibility; // How openly this can be shared
   requestedBy: string;
+  essentialElements?: string[];
+  preferredSources?: string[];
+  areasOfInterest?: string[];
+  justification?: string;
   
   // Bridge integration
   fulfillmentTracking?: {

@@ -5,7 +5,6 @@ import { Intel, IntelRequirement } from './Intel';
 import { Intelligence } from './Intelligence';
 import { IntelReportData } from '../IntelReportData';
 import { ThreatAssessment, RiskAssessment } from './Assessments';
-import { ClassificationUtils } from './Classification';
 
 /**
  * Validation result interface
@@ -311,19 +310,6 @@ export class IntelligenceReportValidator {
         message: 'Report author is required',
         severity: 'ERROR',
         code: 'REPORT_004'
-      });
-    }
-
-    // Classification validation
-    const classValidation = ClassificationUtils.validate(report.classification);
-    if (!classValidation.isValid) {
-      classValidation.errors.forEach(error => {
-        errors.push({
-          field: 'classification',
-          message: error,
-          severity: 'ERROR',
-          code: 'REPORT_005'
-        });
       });
     }
 

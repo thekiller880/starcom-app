@@ -438,27 +438,25 @@ export class EnhancedEIAService {
       console.error('Batch fetch failed:', error);
       
       // Fallback to individual fetches if batch fails
-      const results: EIADataPoint[] = [];
-      for (const seriesId of seriesIds) {
-        try {
-          const dataPoint = await this.getSeries(seriesId);
-          results.push(dataPoint);
-        } catch (individualError) {
-          console.warn(`Failed to fetch series ${seriesId}:`, individualError);
-          // Add a placeholder with null value
-          results.push({
-            seriesId,
-            value: null,
-            timestamp: new Date(),
-            units: 'unknown',
-            label: 'Error',
-            category: 'unknown',
-            priority: 'standard',
-            formattedValue: 'N/A'
-          });
+      const settled = await Promise.allSettled(seriesIds.map((seriesId) => this.getSeries(seriesId)));
+      return settled.map((result, index) => {
+        const seriesId = seriesIds[index];
+        if (result.status === 'fulfilled') {
+          return result.value;
         }
-      }
-      return results;
+
+        console.warn(`Failed to fetch series ${seriesId}:`, result.reason);
+        return {
+          seriesId,
+          value: null,
+          timestamp: new Date(),
+          units: 'unknown',
+          label: 'Error',
+          category: 'unknown',
+          priority: 'standard',
+          formattedValue: 'N/A'
+        };
+      });
     }
   }
 

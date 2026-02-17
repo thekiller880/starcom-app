@@ -27,7 +27,7 @@ describe('CyberCommandVisualization Types', () => {
       expect(isValidVisualizationType('IntelReports')).toBe(true);
       expect(isValidVisualizationType('CyberAttacks')).toBe(true);
       expect(isValidVisualizationType('CyberThreats')).toBe(true);
-      expect(isValidVisualizationType('NetworkInfrastructure')).toBe(true);
+      expect(isValidVisualizationType('Satellites')).toBe(true);
       expect(isValidVisualizationType('CommHubs')).toBe(true);
     });
 
@@ -182,7 +182,7 @@ describe('CyberCommandVisualization Types', () => {
         'IntelReports',
         'CyberAttacks', 
         'CyberThreats',
-        'NetworkInfrastructure',
+        'Satellites',
         'CommHubs'
       ];
 
@@ -209,8 +209,8 @@ describe('CyberCommandVisualization Types', () => {
         DEFAULT_VISUALIZATION_SETTINGS.IntelReports.refreshInterval
       );
 
-      // NetworkInfrastructure should refresh least frequently (static data)
-      expect(DEFAULT_VISUALIZATION_SETTINGS.NetworkInfrastructure.refreshInterval).toBeGreaterThan(
+      // Satellites should refresh least frequently (static data)
+      expect(DEFAULT_VISUALIZATION_SETTINGS.Satellites.refreshInterval).toBeGreaterThan(
         DEFAULT_VISUALIZATION_SETTINGS.CyberAttacks.refreshInterval
       );
     });

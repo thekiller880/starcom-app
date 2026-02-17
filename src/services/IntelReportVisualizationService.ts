@@ -26,7 +26,17 @@ export interface IntelReportVisualizationOptions {
   };
 }
 
+export interface IntelReportVisualizationDebugStats {
+  cacheSize: number;
+  subscriberCount: number;
+  lastFetchAgeMs: number | null;
+  markerAdds: number;
+  duplicateMarkerReplacements: number;
+  notifyCalls: number;
+}
+
 export class IntelReportVisualizationService {
+  private static readonly MAX_CACHE_MARKERS = 500;
   private cache: IntelReportOverlayMarker[] = [];
   private lastFetch: Date | null = null;
   private cacheTimeout = 5 * 60 * 1000; // 5 minutes
@@ -36,6 +46,9 @@ export class IntelReportVisualizationService {
   private subscriptionInitialized = false;
   private realtimeUnsubscribe: (() => void) | null = null;
   private invalidCoordinateReports = new Set<string>();
+  private markerAdds = 0;
+  private duplicateMarkerReplacements = 0;
+  private notifyCalls = 0;
 
   constructor() {
     this.initializeRealtimeSubscription();
@@ -136,7 +149,9 @@ export class IntelReportVisualizationService {
   }
 
   private refreshCacheFromReports(reports: IntelReportUI[]): void {
-    const markers = this.buildMarkersFromReports(reports);
+    const markers = this.buildMarkersFromReports(reports)
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .slice(0, IntelReportVisualizationService.MAX_CACHE_MARKERS);
     this.updateCache(markers);
     this.notifySubscribers(markers);
   }
@@ -155,16 +170,22 @@ export class IntelReportVisualizationService {
   }
 
   private updateCache(markers: IntelReportOverlayMarker[]): void {
-    this.cache = markers;
+    this.cache = markers.slice(0, IntelReportVisualizationService.MAX_CACHE_MARKERS);
     this.lastFetch = new Date();
     this.lastOptionsHash = '';
     this.lastFilteredResult = [];
+
+    if (this.invalidCoordinateReports.size > 1000) {
+      this.invalidCoordinateReports.clear();
+    }
   }
 
   private notifySubscribers(markers: IntelReportOverlayMarker[]): void {
     if (this.subscribers.size === 0) {
       return;
     }
+
+    this.notifyCalls += 1;
 
     const snapshot = this.cloneMarkers(markers);
     this.subscribers.forEach((listener) => {
@@ -205,11 +226,14 @@ export class IntelReportVisualizationService {
       this.invalidCoordinateReports.delete(report.id);
     }
 
+    const tags = [...(report.tags || [])];
+    if (report.category && !tags.includes(report.category)) tags.push(report.category);
+
     return {
       pubkey: report.id,
       title: report.title || 'Unknown Intel Report',
       content: report.content || '',
-      tags: report.tags || [],
+      tags,
       latitude,
       longitude,
       timestamp: this.normalizeTimestamp(report.updatedAt ?? report.createdAt),
@@ -338,6 +362,17 @@ export class IntelReportVisualizationService {
     this.lastOptionsHash = '';
   }
 
+  getDebugStats(): IntelReportVisualizationDebugStats {
+    return {
+      cacheSize: this.cache.length,
+      subscriberCount: this.subscribers.size,
+      lastFetchAgeMs: this.lastFetch ? Date.now() - this.lastFetch.getTime() : null,
+      markerAdds: this.markerAdds,
+      duplicateMarkerReplacements: this.duplicateMarkerReplacements,
+      notifyCalls: this.notifyCalls
+    };
+  }
+
   /**
    * Add a new Intel Report marker immediately (for real-time updates)
    */
@@ -347,7 +382,19 @@ export class IntelReportVisualizationService {
       return;
     }
 
-    this.cache.unshift(marker); // Add to beginning for recency
+    this.markerAdds += 1;
+
+    const existingIndex = this.cache.findIndex((item) => item.pubkey === marker.pubkey);
+    if (existingIndex >= 0) {
+      this.cache.splice(existingIndex, 1);
+      this.duplicateMarkerReplacements += 1;
+    }
+
+    this.cache.unshift(marker);
+    if (this.cache.length > IntelReportVisualizationService.MAX_CACHE_MARKERS) {
+      this.cache.length = IntelReportVisualizationService.MAX_CACHE_MARKERS;
+    }
+
     this.lastFetch = new Date();
     this.lastFilteredResult = [];
     this.lastOptionsHash = '';

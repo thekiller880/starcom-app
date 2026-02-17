@@ -105,11 +105,17 @@ export class IPFSNetworkManager {
     
     // Start peer discovery
     this.discoveryInterval = window.setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
       this.discoverPeers();
     }, 30000); // Every 30 seconds
 
     // Start health monitoring
     this.healthCheckInterval = window.setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
       this.performHealthChecks();
     }, 60000); // Every minute
 

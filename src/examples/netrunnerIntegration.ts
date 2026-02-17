@@ -6,6 +6,7 @@
  */
 
 import { Intel } from '../models/Intel/Intel';
+import type { Intelligence } from '../models/Intel/Intelligence';
 import { IntelEntity } from '../core/intel/types/intelDataModels';
 import { storageOrchestrator } from '../core/intel/storage/storageOrchestrator';
 import { useIntelBridge } from '../core/intel/hooks/useIntelBridge';
@@ -21,7 +22,7 @@ export async function processNetRunnerResults(websiteUrl: string, scanResults: a
     const intel: Intel = {
       id: `netrunner-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       source: 'OSINT',
-      classification: 'UNCLASS',
+      classification: 'UNCLASSIFIED',
       reliability: assessReliability(result),
       timestamp: Date.now(),
       collectedBy: 'netrunner-websitescanner',

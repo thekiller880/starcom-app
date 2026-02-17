@@ -3,7 +3,7 @@
  * 
  * Dynamic row of emoji-only buttons for secondary modes based on active primary mode:
  * 
- * CyberCommand: IntelReports (📑), CyberThreats (🛡️), CyberAttacks (⚡), NetworkInfrastructure (🌐), CommHubs (📡)
+ * CyberCommand: IntelReports (📑), CyberThreats (🛡️), CyberAttacks (⚡), Satellites (🛰️), CommHubs (📡)
  * GeoPolitical: NationalTerritories (🗺️), DiplomaticEvents (🤝), ResourceZones (⛽)
  * EcoNatural: SpaceWeather (☀️), EcologicalDisasters (🌋), EarthWeather (🌦️)
  */

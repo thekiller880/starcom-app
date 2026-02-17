@@ -82,6 +82,7 @@ class WorkspaceBackedIntelReportService implements IntelReportService {
       author,
       category: input.category,
       tags: input.tags,
+      classification: input.classification || 'UNCLASSIFIED',
       status: input.status || 'DRAFT',
       createdAt: now,
       updatedAt: now,
@@ -166,6 +167,7 @@ class WorkspaceBackedIntelReportService implements IntelReportService {
     // Ensure dates are Date objects
     toImport.createdAt = toImport.createdAt instanceof Date ? toImport.createdAt : new Date(toImport.createdAt);
     toImport.updatedAt = new Date();
+    toImport.classification = toImport.classification || 'UNCLASSIFIED';
     if (!toImport.version) toImport.version = 1;
     const historyEntry = makeHistoryEntry({ action: 'IMPORTED', user: 'import', timestamp: new Date().toISOString() });
     toImport.history = [...(toImport.history || []), historyEntry];

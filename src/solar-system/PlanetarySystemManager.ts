@@ -82,7 +82,16 @@ export class PlanetarySystemManager {
         orbitRadius: 1.0, // AU
         orbitPeriod: 365.25, // days
         color: 0x6b93d6,
-        hasAtmosphere: true
+        hasAtmosphere: true,
+        moons: [
+          {
+            name: 'moon',
+            radius: 1737.4, // km
+            orbitRadius: 384400, // km from Earth center
+            orbitPeriod: 27.321661, // sidereal days
+            color: 0xb0b5bb
+          }
+        ]
       },
       {
         name: 'mars',
@@ -270,6 +279,15 @@ export class PlanetarySystemManager {
       if (shouldBeVisible) {
         visibleCount++;
       }
+    }
+
+    const earth = this.planets.get('earth');
+    if (earth && earth.hasMoons()) {
+      const showMoon =
+        scaleContext === ScaleContext.EARTH_SPACE ||
+        scaleContext === ScaleContext.INNER_SOLAR ||
+        scaleContext === ScaleContext.SOLAR_SYSTEM;
+      earth.setMoonVisible(showMoon);
     }
 
     this.performanceMetrics.visiblePlanets = visibleCount;

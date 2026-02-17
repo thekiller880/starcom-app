@@ -8,7 +8,7 @@
  * logic directly to eliminate competing event systems.
  */
 
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import * as THREE from 'three';
 import { IntelReportOverlayMarker } from '../../interfaces/IntelReportOverlay';
 import { useGlobeRightClickInteraction } from '../../hooks/useGlobeRightClickInteraction';
@@ -19,6 +19,8 @@ import { OfflineIntelReportService } from '../../services/OfflineIntelReportServ
 import { OfflineIntelReportsManager } from '../Intel/OfflineIntelReportsManager';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { usePopup } from '../Popup/PopupManager';
+import { findPrimaryGlobeMesh, worldPointToGeoOnGlobe } from '../../utils/globeSurfaceMapping';
+import { useVisualizationOverlay } from '../../hooks/useVisualizationOverlay';
 
 interface Enhanced3DGlobeInteractivityProps {
   globeRef: React.RefObject<{ camera: () => THREE.Camera; scene: () => THREE.Scene }>;
@@ -43,6 +45,7 @@ interface ModelInstance {
   hoverOffset: number;
   localRotationY: number;
   surfaceAnchor: THREE.Vector3;
+  surfaceAnchorIsWorld: boolean;
   globeRadius: number;
   hoverAltitude: number;
 }
@@ -58,6 +61,7 @@ export const Enhanced3DGlobeInteractivity: React.FC<Enhanced3DGlobeInteractivity
 }) => {
   const localContainerRef = useRef<HTMLDivElement>(null);
   const containerRef = parentContainerRef || localContainerRef;
+  const { cursorTrailIndicatorEnabled } = useVisualizationOverlay();
   const { showPopup, hidePopup } = usePopup();
   const intelPopupIdRef = useRef<string | null>(null);
   const intelReportsRef = useRef(intelReports);
@@ -76,10 +80,25 @@ export const Enhanced3DGlobeInteractivity: React.FC<Enhanced3DGlobeInteractivity
   const [tooltipVisible, setTooltipVisible] = useState(false);
 
   // New features state
-  const [mousePositionIndicator, setMousePositionIndicator] = useState<THREE.Mesh | null>(null);
+  const indicatorMeshRef = useRef<THREE.Mesh | null>(null);
+  const indicatorTailRef = useRef<THREE.Line | null>(null);
+  const indicatorTailAttributeRef = useRef<THREE.BufferAttribute | null>(null);
+  const indicatorTailGeometryRef = useRef<THREE.BufferGeometry | null>(null);
+  const indicatorTailPositionsRef = useRef<Float32Array | null>(null);
+  const indicatorTailHistoryRef = useRef<THREE.Vector3[]>([]);
+  const indicatorMotionIntensityRef = useRef<number>(0);
+  const indicatorLastScreenPosRef = useRef<{ x: number; y: number } | null>(null);
   const connectionLinesRef = useRef<THREE.Group>(new THREE.Group());
-  const cachedGlobeMeshRef = useRef<THREE.Object3D | null>(null);
+  const cachedGlobeMeshRef = useRef<THREE.Mesh | null>(null);
   const mouseRef = useRef<THREE.Vector2>(new THREE.Vector2());
+  const indicatorTargetNormalRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 1, 0));
+  const indicatorDisplayNormalRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 1, 0));
+  const indicatorTargetRadiusRef = useRef<number>(0);
+  const indicatorTargetActiveRef = useRef<boolean>(false);
+  const indicatorDisplayInitializedRef = useRef<boolean>(false);
+  const indicatorRotationAxisRef = useRef<THREE.Vector3>(new THREE.Vector3());
+  const indicatorFallbackAxisRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 1, 0));
+  const prefersReducedMotionRef = useRef<boolean>(false);
 
   // Check if we're in the correct visualization mode
   const isIntelReportsMode = visualizationMode.mode === 'CyberCommand' && 
@@ -120,11 +139,23 @@ export const Enhanced3DGlobeInteractivity: React.FC<Enhanced3DGlobeInteractivity
   const MOUSE_STATE_UPDATE_THROTTLE = 100; // Only update React state every 100ms
   const HOVER_DETECTION_THROTTLE = 50; // Hover detection can be more frequent
   const DRAG_DETECTION_THROTTLE = 16; // Drag detection at ~60fps for responsiveness
+  const CURSOR_TRAIL_RESPONSIVENESS = 16;
+  const CURSOR_TRAIL_MAX_DEG_PER_SEC = 300;
+  const CURSOR_SURFACE_OFFSET = 1;
+  const CURSOR_ANGLE_EPSILON = 1e-5;
+  const CURSOR_TAIL_MAX_POINTS = 24;
+  const CURSOR_TAIL_MIN_POINTS = 8;
+  const CURSOR_TAIL_BASE_OPACITY = 0.22;
+  const CURSOR_TAIL_MAX_OPACITY = 0.58;
+  const CURSOR_TAIL_MIN_INTENSITY = 0.22;
+  const CURSOR_TAIL_PX_FOR_MAX_INTENSITY = 28;
+  const CURSOR_TAIL_INTENSITY_DECAY_PER_SEC = 2.4;
   
   // Performance tracking refs
   const lastHoverDetectionRef = useRef(0);
   const lastDragDetectionRef = useRef(0);
   const frameSkipCounterRef = useRef(0);
+  const lastHoverRaycastPositionRef = useRef<{ x: number; y: number } | null>(null);
   
   // Performance monitoring (development only)
   const performanceStatsRef = useRef({
@@ -139,6 +170,27 @@ export const Enhanced3DGlobeInteractivity: React.FC<Enhanced3DGlobeInteractivity
     intelReportsRef.current = intelReports;
   }, [intelReports]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const updatePreference = () => {
+      prefersReducedMotionRef.current = mediaQuery.matches;
+    };
+
+    updatePreference();
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', updatePreference);
+      return () => mediaQuery.removeEventListener('change', updatePreference);
+    }
+
+    mediaQuery.addListener(updatePreference);
+    return () => mediaQuery.removeListener(updatePreference);
+  }, []);
+
   // Direct cursor management without React re-renders
   const updateCursor = useCallback((newCursor: string) => {
     if (currentCursorRef.current !== newCursor && containerRef.current) {
@@ -149,6 +201,22 @@ export const Enhanced3DGlobeInteractivity: React.FC<Enhanced3DGlobeInteractivity
 
   // Screen position tracking for UI positioning
   const [screenPositions, _setScreenPositions] = useState<Map<string, THREE.Vector2>>(new Map());
+
+  const modelMeshMap = useMemo(() => {
+    const map = new Map<string, ModelInstance>();
+    models.forEach((model) => {
+      if (model?.mesh) {
+        map.set(model.mesh.uuid, model);
+      }
+    });
+    return map;
+  }, [models]);
+
+  const modelRootMeshes = useMemo(() => {
+    return models
+      .map((model) => model?.mesh)
+      .filter((mesh): mesh is THREE.Object3D => !!mesh);
+  }, [models]);
 
   // Helper functions for model interactions
   const clearClickedState = useCallback(() => {
@@ -161,6 +229,17 @@ export const Enhanced3DGlobeInteractivity: React.FC<Enhanced3DGlobeInteractivity
   const getModelScreenPosition = useCallback((modelId: string): THREE.Vector2 | null => {
     return screenPositions.get(modelId) || null;
   }, [screenPositions]);
+
+  const resolveGlobeMesh = useCallback((scene: THREE.Scene): THREE.Mesh | null => {
+    const cached = cachedGlobeMeshRef.current;
+    if (cached && cached.parent) {
+      return cached;
+    }
+
+    const found = findPrimaryGlobeMesh(scene);
+    cachedGlobeMeshRef.current = found;
+    return found;
+  }, []);
 
   // Handle context menu actions with enhanced offline Intel Report support
   const handleCustomContextAction = useCallback(async (
@@ -477,17 +556,224 @@ export const Enhanced3DGlobeInteractivity: React.FC<Enhanced3DGlobeInteractivity
       const indicator = new THREE.Mesh(geometry, material);
       indicator.visible = false; // Initially hidden
       scene.add(indicator);
-      setMousePositionIndicator(indicator);
+      indicatorMeshRef.current = indicator;
+
+      const tailGeometry = new THREE.BufferGeometry();
+      const tailPositions = new Float32Array(CURSOR_TAIL_MAX_POINTS * 3);
+      const tailAttribute = new THREE.BufferAttribute(tailPositions, 3);
+      tailGeometry.setAttribute('position', tailAttribute);
+      tailGeometry.setDrawRange(0, 0);
+
+      const tailMaterial = new THREE.LineBasicMaterial({
+        color: 0x00ff41,
+        transparent: true,
+        opacity: CURSOR_TAIL_BASE_OPACITY,
+        depthWrite: false,
+        depthTest: false,
+        blending: THREE.AdditiveBlending
+      });
+
+      const tail = new THREE.Line(tailGeometry, tailMaterial);
+      tail.visible = false;
+      scene.add(tail);
+
+      indicatorTailRef.current = tail;
+      indicatorTailGeometryRef.current = tailGeometry;
+      indicatorTailAttributeRef.current = tailAttribute;
+      indicatorTailPositionsRef.current = tailPositions;
+      indicatorTailHistoryRef.current = [];
 
       return () => {
+        indicatorTargetActiveRef.current = false;
+        indicatorDisplayInitializedRef.current = false;
+        indicatorMeshRef.current = null;
+        indicatorTailRef.current = null;
+        indicatorTailGeometryRef.current = null;
+        indicatorTailAttributeRef.current = null;
+        indicatorTailPositionsRef.current = null;
+        indicatorTailHistoryRef.current = [];
         if (scene && typeof scene.remove === 'function') {
           scene.remove(indicator);
+          scene.remove(tail);
         }
+
+        tailGeometry.dispose();
+        tailMaterial.dispose();
       };
     } catch (error) {
       console.warn('Failed to initialize mouse position indicator:', error);
     }
-  }, [globeRef]);
+  }, [globeRef, CURSOR_TAIL_BASE_OPACITY, CURSOR_TAIL_MAX_POINTS]);
+
+  useEffect(() => {
+    let animationFrameId: number | null = null;
+    let lastFrameTime = 0;
+
+    const animateIndicator = (timestamp: number) => {
+      const indicator = indicatorMeshRef.current;
+      const tail = indicatorTailRef.current;
+      if (!indicator) {
+        animationFrameId = requestAnimationFrame(animateIndicator);
+        return;
+      }
+
+      const dtRaw = lastFrameTime > 0 ? (timestamp - lastFrameTime) / 1000 : 0;
+      const dt = Math.min(Math.max(dtRaw, 0), 0.05);
+      lastFrameTime = timestamp;
+
+      if (!cursorTrailIndicatorEnabled || !indicatorTargetActiveRef.current || document.hidden) {
+        indicator.visible = false;
+        indicatorMotionIntensityRef.current = 0;
+        if (tail) {
+          tail.visible = false;
+        }
+        animationFrameId = requestAnimationFrame(animateIndicator);
+        return;
+      }
+
+      const targetNormal = indicatorTargetNormalRef.current;
+      const displayNormal = indicatorDisplayNormalRef.current;
+
+      if (!indicatorDisplayInitializedRef.current) {
+        displayNormal.copy(targetNormal);
+        indicatorDisplayInitializedRef.current = true;
+      }
+
+      const dot = THREE.MathUtils.clamp(displayNormal.dot(targetNormal), -1, 1);
+      const angle = Math.acos(dot);
+
+      if (angle > CURSOR_ANGLE_EPSILON) {
+        const desiredStep = prefersReducedMotionRef.current
+          ? angle
+          : angle * (1 - Math.exp(-CURSOR_TRAIL_RESPONSIVENESS * Math.max(dt, 1 / 120)));
+        const maxStep = THREE.MathUtils.degToRad(CURSOR_TRAIL_MAX_DEG_PER_SEC) * Math.max(dt, 1 / 120);
+        const step = prefersReducedMotionRef.current
+          ? angle
+          : Math.min(angle, desiredStep, maxStep);
+
+        if (step > 0) {
+          const rotationAxis = indicatorRotationAxisRef.current;
+          rotationAxis.copy(displayNormal).cross(targetNormal);
+
+          if (rotationAxis.lengthSq() < 1e-10) {
+            rotationAxis.copy(displayNormal).cross(indicatorFallbackAxisRef.current);
+            if (rotationAxis.lengthSq() < 1e-10) {
+              rotationAxis.set(1, 0, 0);
+            }
+          }
+
+          rotationAxis.normalize();
+          displayNormal.applyAxisAngle(rotationAxis, step).normalize();
+        }
+      } else {
+        displayNormal.copy(targetNormal);
+      }
+
+      const targetRadius = indicatorTargetRadiusRef.current;
+      if (!Number.isFinite(targetRadius) || targetRadius <= 0) {
+        indicator.visible = false;
+        if (tail) {
+          tail.visible = false;
+        }
+        indicatorTargetActiveRef.current = false;
+        animationFrameId = requestAnimationFrame(animateIndicator);
+        return;
+      }
+
+      indicator.position.copy(displayNormal).multiplyScalar(targetRadius);
+      indicator.visible = true;
+
+      if (tail && indicatorTailAttributeRef.current && indicatorTailPositionsRef.current) {
+        const tailAttribute = indicatorTailAttributeRef.current;
+        const tailPositions = indicatorTailPositionsRef.current;
+        const tailHistory = indicatorTailHistoryRef.current;
+
+        if (tailHistory.length !== CURSOR_TAIL_MAX_POINTS) {
+          tailHistory.length = 0;
+          for (let index = 0; index < CURSOR_TAIL_MAX_POINTS; index += 1) {
+            tailHistory.push(indicator.position.clone());
+          }
+        }
+
+        for (let index = CURSOR_TAIL_MAX_POINTS - 1; index > 0; index -= 1) {
+          tailHistory[index].copy(tailHistory[index - 1]);
+        }
+        tailHistory[0].copy(indicator.position);
+
+        indicatorMotionIntensityRef.current = Math.max(
+          0,
+          indicatorMotionIntensityRef.current - CURSOR_TAIL_INTENSITY_DECAY_PER_SEC * Math.max(dt, 1 / 120)
+        );
+
+        const intensity = prefersReducedMotionRef.current
+          ? 0
+          : (() => {
+              const normalized = THREE.MathUtils.clamp(indicatorMotionIntensityRef.current, 0, 1);
+              if (normalized <= 0) {
+                return 0;
+              }
+
+              return Math.max(CURSOR_TAIL_MIN_INTENSITY, Math.sqrt(normalized));
+            })();
+
+        const activeTailPoints = prefersReducedMotionRef.current
+          ? 1
+          : Math.max(
+              CURSOR_TAIL_MIN_POINTS,
+              Math.min(
+                CURSOR_TAIL_MAX_POINTS,
+                CURSOR_TAIL_MIN_POINTS + Math.round((CURSOR_TAIL_MAX_POINTS - CURSOR_TAIL_MIN_POINTS) * intensity)
+              )
+            );
+
+        const curveHistoryPoints = tailHistory
+          .slice(0, Math.max(activeTailPoints, 2))
+          .map((point) => point.clone().normalize().multiplyScalar(targetRadius));
+        const curvedPoints = curveHistoryPoints.length >= 2
+          ? new THREE.CatmullRomCurve3(curveHistoryPoints, false, 'centripetal', 0.25).getPoints(activeTailPoints - 1)
+          : curveHistoryPoints;
+
+        for (let index = 0; index < CURSOR_TAIL_MAX_POINTS; index += 1) {
+          const source = curvedPoints[Math.min(index, activeTailPoints - 1)] || curvedPoints[0] || tailHistory[0];
+          const offset = index * 3;
+          tailPositions[offset] = source.x;
+          tailPositions[offset + 1] = source.y;
+          tailPositions[offset + 2] = source.z;
+        }
+
+        tailAttribute.needsUpdate = true;
+        tail.geometry.setDrawRange(0, activeTailPoints);
+
+        const tailMaterial = tail.material as THREE.LineBasicMaterial;
+        tailMaterial.opacity = prefersReducedMotionRef.current
+          ? 0
+          : CURSOR_TAIL_BASE_OPACITY + (CURSOR_TAIL_MAX_OPACITY - CURSOR_TAIL_BASE_OPACITY) * intensity;
+
+        tail.visible = activeTailPoints > 1 && tailMaterial.opacity > 0;
+      }
+
+      animationFrameId = requestAnimationFrame(animateIndicator);
+    };
+
+    animationFrameId = requestAnimationFrame(animateIndicator);
+
+    return () => {
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [
+    cursorTrailIndicatorEnabled,
+    CURSOR_ANGLE_EPSILON,
+    CURSOR_TRAIL_MAX_DEG_PER_SEC,
+    CURSOR_TRAIL_RESPONSIVENESS,
+    CURSOR_TAIL_BASE_OPACITY,
+    CURSOR_TAIL_MAX_OPACITY,
+    CURSOR_TAIL_MIN_INTENSITY,
+    CURSOR_TAIL_INTENSITY_DECAY_PER_SEC,
+    CURSOR_TAIL_MAX_POINTS,
+    CURSOR_TAIL_MIN_POINTS
+  ]);
 
   // Initialize connection lines group
   useEffect(() => {
@@ -544,18 +830,7 @@ export const Enhanced3DGlobeInteractivity: React.FC<Enhanced3DGlobeInteractivity
 
     const globeObj = globeRef.current;
     const scene = globeObj?.scene();
-    let globeMesh = cachedGlobeMeshRef.current;
-
-    if (!globeMesh || globeMesh.parent === null) {
-      let found: THREE.Object3D | null = null;
-      scene?.traverse((child) => {
-        if (!found && child instanceof THREE.Mesh && child.geometry instanceof THREE.SphereGeometry) {
-          found = child;
-        }
-      });
-      cachedGlobeMeshRef.current = found;
-      globeMesh = found;
-    }
+    const globeMesh = scene ? resolveGlobeMesh(scene) : null;
 
     if (globeMesh) {
       globeMesh.updateMatrixWorld(true);
@@ -568,7 +843,7 @@ export const Enhanced3DGlobeInteractivity: React.FC<Enhanced3DGlobeInteractivity
         if (!model || !model.report || !model.positionContainer?.position) return;
 
         const surfacePosition = model.surfaceAnchor.clone();
-        if (globeMesh) {
+        if (!model.surfaceAnchorIsWorld && globeMesh) {
           surfacePosition.applyMatrix4(globeMesh.matrixWorld);
         }
 
@@ -594,7 +869,7 @@ export const Enhanced3DGlobeInteractivity: React.FC<Enhanced3DGlobeInteractivity
     } catch (error) {
       console.warn('Failed to update connection lines:', error);
     }
-  }, [models, isIntelReportsMode, globeRef]);
+  }, [models, isIntelReportsMode, globeRef, resolveGlobeMesh]);
 
   // Note: Intel Report creation is now handled through the right-click context menu
   // to avoid interference with globe drag interactions
@@ -638,6 +913,29 @@ export const Enhanced3DGlobeInteractivity: React.FC<Enhanced3DGlobeInteractivity
       x: event.clientX, // Global coordinates for tooltips
       y: event.clientY
     };
+
+    if (cursorTrailIndicatorEnabled) {
+      const prevScreenPos = indicatorLastScreenPosRef.current;
+      indicatorLastScreenPosRef.current = { x: event.clientX, y: event.clientY };
+      if (prevScreenPos) {
+        const dx = event.clientX - prevScreenPos.x;
+        const dy = event.clientY - prevScreenPos.y;
+        const pxDelta = Math.sqrt(dx * dx + dy * dy);
+        const normalizedDelta = THREE.MathUtils.clamp(pxDelta / CURSOR_TAIL_PX_FOR_MAX_INTENSITY, 0, 1);
+        indicatorMotionIntensityRef.current = Math.max(indicatorMotionIntensityRef.current * 0.65, normalizedDelta);
+      }
+    } else {
+      indicatorLastScreenPosRef.current = null;
+      indicatorTargetActiveRef.current = false;
+      const indicator = indicatorMeshRef.current;
+      if (indicator) {
+        indicator.visible = false;
+      }
+      const tail = indicatorTailRef.current;
+      if (tail) {
+        tail.visible = false;
+      }
+    }
 
     // LEVEL 2: DRAG DETECTION (high frequency ~60fps for responsive dragging)
     const isDraggingPlanet = isDraggingRef.current;
@@ -704,7 +1002,9 @@ export const Enhanced3DGlobeInteractivity: React.FC<Enhanced3DGlobeInteractivity
 
           // Debug logging (throttled)
           if (isDragging && !prev.isDragging) {
-            console.log('🖱️ COMPREHENSIVE Handler - Drag detected:', { dragDistance, dragThreshold });
+            if (process.env.NODE_ENV === 'development') {
+              console.log('🖱️ COMPREHENSIVE Handler - Drag detected:', { dragDistance, dragThreshold });
+            }
           }
         }
 
@@ -730,6 +1030,15 @@ export const Enhanced3DGlobeInteractivity: React.FC<Enhanced3DGlobeInteractivity
 
       if (!scene || !camera) return;
 
+      const previousRaycastPosition = lastHoverRaycastPositionRef.current;
+      const deltaX = previousRaycastPosition ? x - previousRaycastPosition.x : 0;
+      const deltaY = previousRaycastPosition ? y - previousRaycastPosition.y : 0;
+      const movementSq = deltaX * deltaX + deltaY * deltaY;
+      if (previousRaycastPosition && movementSq < 4) {
+        return;
+      }
+      lastHoverRaycastPositionRef.current = { x, y };
+
       // Normalize mouse coordinates to [-1, 1] range
       mouseRef.current.x = (x / rect.width) * 2 - 1;
       mouseRef.current.y = -(y / rect.height) * 2 + 1;
@@ -739,44 +1048,85 @@ export const Enhanced3DGlobeInteractivity: React.FC<Enhanced3DGlobeInteractivity
 
       // PRIORITY 1: Intel model intersection detection
       let hoveredIntelModel: ModelInstance | null = null;
-      for (const model of models) {
-        if (model.mesh) {
-          const intersects = raycasterRef.current.intersectObject(model.mesh, true);
-          if (intersects.length > 0) {
-            hoveredIntelModel = model;
-            break; // First hit wins
+      if (modelRootMeshes.length > 0) {
+        const intersects = raycasterRef.current.intersectObjects(modelRootMeshes, true);
+        if (intersects.length > 0) {
+          let currentObject: THREE.Object3D | null = intersects[0].object;
+          while (currentObject) {
+            const matchedModel = modelMeshMap.get(currentObject.uuid);
+            if (matchedModel) {
+              hoveredIntelModel = matchedModel;
+              break;
+            }
+            currentObject = currentObject.parent;
           }
+        }
+      }
+
+      if (hoveredIntelModel) {
+        indicatorTargetActiveRef.current = false;
+        const indicator = indicatorMeshRef.current;
+        if (indicator) {
+          indicator.visible = false;
+        }
+        const tail = indicatorTailRef.current;
+        if (tail) {
+          tail.visible = false;
         }
       }
 
       // PRIORITY 2: Globe surface intersection (only if no intel model hovered)
       let newGlobeHoverPosition: { lat: number; lng: number } | null = null;
       if (!hoveredIntelModel) {
-        let globeMesh: THREE.Mesh | null = null;
-        scene.traverse((child) => {
-          if (child instanceof THREE.Mesh && child.geometry instanceof THREE.SphereGeometry) {
-            globeMesh = child;
-          }
-        });
+        const globeMesh = resolveGlobeMesh(scene);
 
         if (globeMesh) {
           const globeIntersects = raycasterRef.current.intersectObject(globeMesh);
           if (globeIntersects.length > 0) {
             const intersectionPoint = globeIntersects[0].point;
-            const radius = 100; // Globe radius
-            const lat = 90 - (Math.acos(intersectionPoint.y / radius) * 180 / Math.PI);
-            const lng = ((270 + (Math.atan2(intersectionPoint.x, intersectionPoint.z) * 180 / Math.PI)) % 360) - 180;
+            const globeGeo = worldPointToGeoOnGlobe(intersectionPoint, globeMesh);
             
-            newGlobeHoverPosition = { lat, lng };
+            newGlobeHoverPosition = globeGeo;
 
-            // Update mouse position indicator
-            if (mousePositionIndicator) {
-              mousePositionIndicator.position.copy(intersectionPoint);
-              mousePositionIndicator.position.normalize().multiplyScalar(radius + 1);
-              mousePositionIndicator.visible = true;
+            const radius = intersectionPoint.length() + CURSOR_SURFACE_OFFSET;
+            const targetNormal = intersectionPoint.clone().normalize();
+            const isValidTarget =
+              Number.isFinite(targetNormal.x) &&
+              Number.isFinite(targetNormal.y) &&
+              Number.isFinite(targetNormal.z) &&
+              Number.isFinite(radius) &&
+              radius > 0;
+
+            if (isValidTarget && cursorTrailIndicatorEnabled) {
+              indicatorTargetNormalRef.current.copy(targetNormal);
+              indicatorTargetRadiusRef.current = radius;
+              indicatorTargetActiveRef.current = true;
+
+              if (!indicatorDisplayInitializedRef.current) {
+                indicatorDisplayNormalRef.current.copy(targetNormal);
+                indicatorDisplayInitializedRef.current = true;
+              }
+            } else {
+              indicatorTargetActiveRef.current = false;
+              const indicator = indicatorMeshRef.current;
+              if (indicator) {
+                indicator.visible = false;
+              }
+              const tail = indicatorTailRef.current;
+              if (tail) {
+                tail.visible = false;
+              }
             }
-          } else if (mousePositionIndicator) {
-            mousePositionIndicator.visible = false;
+          } else {
+            indicatorTargetActiveRef.current = false;
+            const indicator = indicatorMeshRef.current;
+            if (indicator) {
+              indicator.visible = false;
+            }
+            const tail = indicatorTailRef.current;
+            if (tail) {
+              tail.visible = false;
+            }
           }
         }
       }
@@ -798,17 +1148,137 @@ export const Enhanced3DGlobeInteractivity: React.FC<Enhanced3DGlobeInteractivity
       }
     }
   }, [
-    isIntelReportsMode, 
+    isIntelReportsMode,
+    cursorTrailIndicatorEnabled,
     containerRef, 
     globeRef, 
-    models, 
+    modelRootMeshes,
+    modelMeshMap,
     dragThreshold, 
-    mousePositionIndicator, 
+    CURSOR_SURFACE_OFFSET,
+    CURSOR_TAIL_PX_FOR_MAX_INTENSITY,
     updateCursor,
     // Throttling constants (these never change, but including for completeness)
     MOUSE_STATE_UPDATE_THROTTLE,
     HOVER_DETECTION_THROTTLE,
-    DRAG_DETECTION_THROTTLE
+    DRAG_DETECTION_THROTTLE,
+    resolveGlobeMesh
+  ]);
+
+  // Global cursor trail tracking for non-Intel visualization modes
+  useEffect(() => {
+    if (!containerRef.current || !globeRef.current) {
+      return;
+    }
+
+    const container = containerRef.current;
+
+    const hideIndicator = () => {
+      indicatorLastScreenPosRef.current = null;
+      indicatorTargetActiveRef.current = false;
+      const indicator = indicatorMeshRef.current;
+      if (indicator) {
+        indicator.visible = false;
+      }
+      const tail = indicatorTailRef.current;
+      if (tail) {
+        tail.visible = false;
+      }
+    };
+
+    const handleGlobalCursorMove = (event: MouseEvent) => {
+      if (isIntelReportsMode) {
+        return;
+      }
+
+      if (!cursorTrailIndicatorEnabled || !containerRef.current || !globeRef.current) {
+        hideIndicator();
+        return;
+      }
+
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+
+      if (x < 0 || y < 0 || x > rect.width || y > rect.height) {
+        hideIndicator();
+        return;
+      }
+
+      const prevScreenPos = indicatorLastScreenPosRef.current;
+      indicatorLastScreenPosRef.current = { x: event.clientX, y: event.clientY };
+      if (prevScreenPos) {
+        const dx = event.clientX - prevScreenPos.x;
+        const dy = event.clientY - prevScreenPos.y;
+        const pxDelta = Math.sqrt(dx * dx + dy * dy);
+        const normalizedDelta = THREE.MathUtils.clamp(pxDelta / CURSOR_TAIL_PX_FOR_MAX_INTENSITY, 0, 1);
+        indicatorMotionIntensityRef.current = Math.max(indicatorMotionIntensityRef.current * 0.65, normalizedDelta);
+      }
+
+      const globeObj = globeRef.current;
+      const scene = globeObj?.scene();
+      const camera = globeObj?.camera();
+      if (!scene || !camera) {
+        hideIndicator();
+        return;
+      }
+
+      mouseRef.current.x = (x / rect.width) * 2 - 1;
+      mouseRef.current.y = -(y / rect.height) * 2 + 1;
+      raycasterRef.current.setFromCamera(mouseRef.current, camera);
+
+      const globeMesh = resolveGlobeMesh(scene);
+      if (!globeMesh) {
+        hideIndicator();
+        return;
+      }
+
+      const globeIntersects = raycasterRef.current.intersectObject(globeMesh);
+      if (!globeIntersects.length) {
+        hideIndicator();
+        return;
+      }
+
+      const intersectionPoint = globeIntersects[0].point;
+      const radius = intersectionPoint.length() + CURSOR_SURFACE_OFFSET;
+      const targetNormal = intersectionPoint.clone().normalize();
+      const isValidTarget =
+        Number.isFinite(targetNormal.x) &&
+        Number.isFinite(targetNormal.y) &&
+        Number.isFinite(targetNormal.z) &&
+        Number.isFinite(radius) &&
+        radius > 0;
+
+      if (!isValidTarget) {
+        hideIndicator();
+        return;
+      }
+
+      indicatorTargetNormalRef.current.copy(targetNormal);
+      indicatorTargetRadiusRef.current = radius;
+      indicatorTargetActiveRef.current = true;
+
+      if (!indicatorDisplayInitializedRef.current) {
+        indicatorDisplayNormalRef.current.copy(targetNormal);
+        indicatorDisplayInitializedRef.current = true;
+      }
+    };
+
+    container.addEventListener('mousemove', handleGlobalCursorMove);
+    container.addEventListener('mouseleave', hideIndicator);
+
+    return () => {
+      container.removeEventListener('mousemove', handleGlobalCursorMove);
+      container.removeEventListener('mouseleave', hideIndicator);
+    };
+  }, [
+    isIntelReportsMode,
+    cursorTrailIndicatorEnabled,
+    containerRef,
+    globeRef,
+    resolveGlobeMesh,
+    CURSOR_SURFACE_OFFSET,
+    CURSOR_TAIL_PX_FOR_MAX_INTENSITY
   ]);
 
   // COMPREHENSIVE MOUSE DOWN HANDLER
@@ -819,7 +1289,9 @@ export const Enhanced3DGlobeInteractivity: React.FC<Enhanced3DGlobeInteractivity
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
     
-    console.log('🖱️ COMPREHENSIVE Handler - Mouse Down:', { x, y, timestamp: Date.now() });
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🖱️ COMPREHENSIVE Handler - Mouse Down:', { x, y, timestamp: Date.now() });
+    }
     
     // Reset frame skip counter for immediate drag detection
     frameSkipCounterRef.current = 0;
@@ -855,20 +1327,24 @@ export const Enhanced3DGlobeInteractivity: React.FC<Enhanced3DGlobeInteractivity
       // Determine if this was a click or drag based on distance and time
       const wasClick = !prev.hasDraggedPastThreshold && timeSinceMouseDown < timeThreshold;
       
-      console.log('🖱️ COMPREHENSIVE Handler - Mouse Up Analysis:', {
-        dragDistance: prev.dragDistance,
-        dragThreshold,
-        timeSinceMouseDown,
-        timeThreshold,
-        hasDraggedPastThreshold: prev.hasDraggedPastThreshold,
-        wasClick,
-        hoveredModel: prev.hoveredModel?.report?.title || 'none',
-        globePosition: prev.globeHoverPosition
-      });
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🖱️ COMPREHENSIVE Handler - Mouse Up Analysis:', {
+          dragDistance: prev.dragDistance,
+          dragThreshold,
+          timeSinceMouseDown,
+          timeThreshold,
+          hasDraggedPastThreshold: prev.hasDraggedPastThreshold,
+          wasClick,
+          hoveredModel: prev.hoveredModel?.report?.title || 'none',
+          globePosition: prev.globeHoverPosition
+        });
+      }
       
       // Handle click actions
       if (wasClick && prev.hoveredModel) {
-        console.log('✅ COMPREHENSIVE Handler - Processing intel model click:', prev.hoveredModel.report.title);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('✅ COMPREHENSIVE Handler - Processing intel model click:', prev.hoveredModel.report.title);
+        }
         return {
           ...prev,
           clickedModel: prev.hoveredModel,
@@ -877,7 +1353,9 @@ export const Enhanced3DGlobeInteractivity: React.FC<Enhanced3DGlobeInteractivity
           hasDraggedPastThreshold: false
         };
       } else if (wasClick && prev.globeHoverPosition) {
-        console.log('✅ COMPREHENSIVE Handler - Globe click at:', prev.globeHoverPosition);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('✅ COMPREHENSIVE Handler - Globe click at:', prev.globeHoverPosition);
+        }
         // Globe click - handled via context menu
       }
       
@@ -913,24 +1391,21 @@ export const Enhanced3DGlobeInteractivity: React.FC<Enhanced3DGlobeInteractivity
 
   // Update screen positions for UI positioning (from original useIntel3DInteraction logic)
   useEffect(() => {
-    if (!isIntelReportsMode || !globeRef.current || !containerRef.current || !models.length) return;
+    const shouldTrackScreenPositions =
+      isIntelReportsMode &&
+      (unifiedInteractionState.hoveredModel !== null || unifiedInteractionState.clickedModel !== null);
 
-    let animationFrameId: number;
-    let lastUpdateTime = 0;
-    const UPDATE_THROTTLE = 500; // Update every 500ms
+    if (!shouldTrackScreenPositions || !globeRef.current || !containerRef.current || !models.length) return;
+
+    let updateIntervalId: ReturnType<typeof setInterval> | null = null;
+    const UPDATE_INTERVAL_MS = 500;
     let lastScreenPositions = new Map<string, THREE.Vector2>();
-    let isAnimationRunning = false;
 
-    const updateScreenPositions = (currentTime: number = 0) => {
-      if (!isAnimationRunning) return;
-      
-      if (currentTime - lastUpdateTime < UPDATE_THROTTLE) {
-        animationFrameId = requestAnimationFrame(updateScreenPositions);
+    const updateScreenPositions = () => {
+      if (document.hidden) {
         return;
       }
-      
-      lastUpdateTime = currentTime;
-      
+
       const globeObj = globeRef.current as unknown as { camera: () => THREE.Camera; };
       const camera = globeObj?.camera();
       const container = containerRef.current;
@@ -974,22 +1449,32 @@ export const Enhanced3DGlobeInteractivity: React.FC<Enhanced3DGlobeInteractivity
           _setScreenPositions(newScreenPositions);
         }
       }
-      
-      if (isAnimationRunning) {
-        animationFrameId = requestAnimationFrame(updateScreenPositions);
+    };
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        updateScreenPositions();
       }
     };
 
-    isAnimationRunning = true;
-    animationFrameId = requestAnimationFrame(updateScreenPositions);
+    updateScreenPositions();
+    updateIntervalId = setInterval(updateScreenPositions, UPDATE_INTERVAL_MS);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      isAnimationRunning = false;
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
+      if (updateIntervalId) {
+        clearInterval(updateIntervalId);
       }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [isIntelReportsMode, globeRef, containerRef, models]); // Include models for proper dependency tracking
+  }, [
+    isIntelReportsMode,
+    unifiedInteractionState.hoveredModel,
+    unifiedInteractionState.clickedModel,
+    globeRef,
+    containerRef,
+    models
+  ]);
 
   // Set initial cursor
   useEffect(() => {

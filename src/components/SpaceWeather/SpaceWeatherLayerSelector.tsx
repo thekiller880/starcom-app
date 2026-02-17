@@ -17,6 +17,15 @@ export const SpaceWeatherLayerSelector: React.FC<SpaceWeatherLayerSelectorProps>
   const { settings, updateSettings } = context;
   const activeLayer = settings.activeLayer;
 
+  const layerToggleUpdates: Record<string, Partial<typeof settings>> = {
+    electricFields: { showElectricFields: true },
+    geomagneticIndex: { showGeomagneticIndex: true },
+    solarWind: { showSolarWind: true },
+    magnetosphere: { showMagnetopause: true },
+    aurora: { showAuroralOval: true },
+    radiation: { showRadiation: true, showMagneticField: true }
+  };
+
   const handleSelect = (layer: SpaceWeatherLayerDefinition) => {
     if (layer.capability === 'planned') {
       return;
@@ -24,7 +33,10 @@ export const SpaceWeatherLayerSelector: React.FC<SpaceWeatherLayerSelectorProps>
     if (layer.id === activeLayer) {
       return;
     }
-    updateSettings({ activeLayer: layer.id });
+    updateSettings({
+      activeLayer: layer.id,
+      ...(layerToggleUpdates[layer.id] || {})
+    });
   };
 
   return (

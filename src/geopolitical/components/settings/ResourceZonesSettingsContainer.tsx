@@ -1,5 +1,5 @@
 import React from 'react';
-import { useGeoPoliticalSettings } from '../../../../hooks/useGeoPoliticalSettings';
+import { useGeoPoliticalSettings } from '../../../hooks/useGeoPoliticalSettings';
 
 // Placeholder MVP container for Resource Zones
 
@@ -12,7 +12,7 @@ export const ResourceZonesSettingsContainer: React.FC = () => {
       <fieldset className="gp-settings-fieldset">
         <legend>Resource Types</legend>
         {Object.entries(rz.resourceTypes).map(([key, val]) => (
-          <label key={key}><input type="checkbox" checked={val} onChange={e=>updateResourceZones({ resourceTypes: { ...rz.resourceTypes, [key]: e.target.checked } })} /> {key}</label>
+          <label key={key}><input type="checkbox" checked={Boolean(val)} onChange={e=>updateResourceZones({ resourceTypes: { ...rz.resourceTypes, [key]: e.target.checked } })} /> {key}</label>
         ))}
       </fieldset>
       <label className="gp-settings-label">Zone Opacity {rz.zoneOpacity}%

@@ -9,6 +9,7 @@ const SCROLL_SPEED = 1; // px per frame
 // Seamless infinite marquee component
 const Marquee: React.FC<MarqueeProps> = ({ 
   dataPoints, 
+  loading = false,
   error = null,
   loadingStates = {},
   dataAvailability = {},
@@ -32,6 +33,7 @@ const Marquee: React.FC<MarqueeProps> = ({
   
   // Mouse hover state for pausing
   const [isHovered, setIsHovered] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
 
   // Drag threshold to distinguish between clicks and drags
   const DRAG_THRESHOLD = 5; // pixels
@@ -189,6 +191,7 @@ const Marquee: React.FC<MarqueeProps> = ({
       <div
         key={uniqueKey}
         className={`${styles.marqueeItem} ${styles.marqueeItemClickable}`}
+        aria-label={`${dataPoint.label}: ${dataPoint.value}`}
         onClick={handleDataPointClick}
         onMouseEnter={() => onDataPointHover?.(dataPoint)}
         onMouseLeave={() => onDataPointHover?.(null)}
@@ -222,18 +225,35 @@ const Marquee: React.FC<MarqueeProps> = ({
     } else {
       // Fallback for development/testing
       console.log(`Opening settings for data point: ${dataPointId}`);
-      alert(`Opening settings for: ${dataPointId}`);
+      if (typeof globalThis !== 'undefined' && typeof globalThis.alert === 'function') {
+        globalThis.alert(`Opening settings for: ${dataPointId}`);
+      }
     }
   };
 
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === ' ' || event.key === 'Enter') {
+      event.preventDefault();
+      setIsHovered(prev => !prev);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className={`${styles.marquee} ${customClassName || ''}`} role="status" aria-live="polite">
+        Loading data...
+      </div>
+    );
+  }
+
   if (error) {
     return (
-      <div className={`${styles.marquee} ${customClassName || ''}`}>
+      <div className={`${styles.marquee} ${customClassName || ''}`} role="alert">
         <div className={styles.marqueeContent}>
           <div className={styles.marqueeItem} style={{ color: '#ef4444' }}>
             <span className={styles.marqueeIcon}>⚠️</span>
             <span className={styles.marqueeValue}>
-              Error loading data: {error}
+              Error: {error}
             </span>
           </div>
         </div>
@@ -243,11 +263,11 @@ const Marquee: React.FC<MarqueeProps> = ({
 
   if (!dataPoints || dataPoints.length === 0) {
     return (
-      <div className={`${styles.marquee} ${customClassName || ''}`}>
+      <div className={`${styles.marquee} ${customClassName || ''}`} aria-label="marquee-empty">
         <div className={styles.marqueeContent}>
           <div className={styles.marqueeItem}>
             <span className={styles.marqueeValue}>
-              No data available
+              No data selected.
             </span>
           </div>
         </div>
@@ -258,11 +278,18 @@ const Marquee: React.FC<MarqueeProps> = ({
   return (
     <div 
       ref={containerRef}
-      className={`${styles.marquee} ${customClassName || ''} ${hasActuallyDragged ? styles.marqueeDragging : ''}`}
+      className={`${styles.marquee} ${customClassName || ''} ${hasActuallyDragged ? styles.marqueeDragging : ''} ${isFocused ? 'ring-2' : ''}`}
+      role="region"
+      aria-label="marquee"
+      aria-live="polite"
+      tabIndex={0}
       onMouseDown={handleMouseDown}
       onTouchStart={handleTouchStart}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
+      onKeyDown={handleKeyDown}
     >
       <div 
         ref={contentRef}

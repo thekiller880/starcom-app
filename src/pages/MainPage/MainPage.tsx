@@ -26,19 +26,23 @@ const MainPage: React.FC = () => {
   // Auto-navigate to CyberCommand when visiting the root URL (STABILIZED)
   useEffect(() => {
     if (location.pathname === '/' && !currentApp && !hasAutoNavigated) {
-      console.log('🏠 MainPage: Auto-navigating to CyberCommand Globe on root URL (one-time)');
+      if (import.meta.env.DEV) {
+        console.log('🏠 MainPage: Auto-navigating to CyberCommand Globe on root URL (one-time)');
+      }
       setHasAutoNavigated(true);
       navigateToApp('cybercommand', 'standalone');
     }
   }, [location.pathname, currentApp, navigateToApp, hasAutoNavigated]);
   
   // DIAGNOSTIC: Log current application state
-  console.log('🏠 MainPage: Enhanced Router state', { 
-    currentApp, 
-    context,
-    urlParams: params,
-    pathname: location.pathname 
-  });
+  if (import.meta.env.DEV) {
+    console.log('🏠 MainPage: Enhanced Router state', {
+      currentApp,
+      context,
+      urlParams: params,
+      pathname: location.pathname
+    });
+  }
   
   return (
     <div className={styles.mainPage}>

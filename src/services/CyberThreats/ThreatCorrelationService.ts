@@ -325,7 +325,11 @@ function calculateTemporalOverlap(start1: Date, end1: Date, start2: Date, end2: 
   const overlapMs = Math.max(0, overlapEnd.getTime() - overlapStart.getTime());
   const overlapHours = overlapMs / (1000 * 60 * 60);
   
-  const timeGapHours = Math.abs(start1.getTime() - start2.getTime()) / (1000 * 60 * 60);
+  const firstIntervalStartsFirst = start1.getTime() <= start2.getTime();
+  const earlierEnd = firstIntervalStartsFirst ? end1.getTime() : end2.getTime();
+  const laterStart = firstIntervalStartsFirst ? start2.getTime() : start1.getTime();
+  const gapMs = Math.max(0, laterStart - earlierEnd);
+  const timeGapHours = gapMs / (1000 * 60 * 60);
   
   let overlapType: TemporalOverlap['overlap_type'];
   if (overlapHours > 0) {
@@ -434,7 +438,7 @@ export class ThreatCorrelationService {
   /**
    * Analyze all possible correlations between two specific threats
    */
-  async analyzeAllCorrelations(threat1: CyberThreatData, threat2: CyberThreatData): Promise<ThreatCorrelation[]> {
+  analyzeAllCorrelations(threat1: CyberThreatData, threat2: CyberThreatData): ThreatCorrelation[] {
     const correlations: ThreatCorrelation[] = [];
 
     // Apply each correlation rule independently
@@ -473,16 +477,16 @@ export class ThreatCorrelationService {
    * Analyze correlation between two specific threats (for backward compatibility)
    */
   async analyzeCorrelationPair(threat1: CyberThreatData, threat2: CyberThreatData): Promise<ThreatCorrelation | null> {
-    const correlations = await this.analyzeAllCorrelations(threat1, threat2);
+    const correlations = this.analyzeAllCorrelations(threat1, threat2);
     return correlations.length > 0 ? correlations[0] : null;
   }
 
   /**
    * Build threat networks from correlations
    */
-  async buildThreatNetworks(threats: CyberThreatData[]): Promise<ThreatNetwork[]> {
+  buildThreatNetworks(threats: CyberThreatData[]): ThreatNetwork[] {
     // First, analyze all possible correlations between threats
-    await this.analyzeAllThreatPairs(threats);
+    this.analyzeAllThreatPairs(threats);
     
     const networks: ThreatNetwork[] = [];
     const processedThreats = new Set<string>();
@@ -508,10 +512,10 @@ export class ThreatCorrelationService {
   /**
    * Analyze correlations between all threat pairs
    */
-  private async analyzeAllThreatPairs(threats: CyberThreatData[]): Promise<void> {
+  private analyzeAllThreatPairs(threats: CyberThreatData[]): void {
     for (let i = 0; i < threats.length; i++) {
       for (let j = i + 1; j < threats.length; j++) {
-        const correlations = await this.analyzeAllCorrelations(threats[i], threats[j]);
+        const correlations = this.analyzeAllCorrelations(threats[i], threats[j]);
         if (correlations.length > 0) {
           // Store correlations for both threats
           this.storeCorrelations(threats[i].id, correlations);
@@ -608,13 +612,21 @@ export class ThreatCorrelationService {
   } {
     const iocs1 = threat1.iocs.map(ioc => ioc.value);
     const iocs2 = threat2.iocs.map(ioc => ioc.value);
-    
-    const similarity = calculateJaccardSimilarity(iocs1, iocs2);
-    
-    if (similarity > 0) {
-      const sharedIOCs = threat1.iocs.filter(ioc1 => 
-        threat2.iocs.some(ioc2 => ioc2.value === ioc1.value)
-      );
+
+    if (iocs1.length === 0 || iocs2.length === 0) {
+      return { score: 0 };
+    }
+
+    const sharedIOCs = threat1.iocs.filter(ioc1 =>
+      threat2.iocs.some(ioc2 => ioc2.value === ioc1.value)
+    );
+    const sharedCount = sharedIOCs.length;
+
+    if (sharedCount > 0) {
+      const overlapBySmallerSet = sharedCount / Math.min(iocs1.length, iocs2.length);
+      const overlapByLargerSet = sharedCount / Math.max(iocs1.length, iocs2.length);
+      const baseScore = overlapBySmallerSet * 0.8 + overlapByLargerSet * 0.2;
+      const similarity = Math.min(1, baseScore + 0.1);
 
       return {
         score: similarity,
@@ -987,6 +999,14 @@ export class ThreatCorrelationService {
   }
 
   private determineNetworkType(correlations: ThreatCorrelation[]): NetworkType {
+    if (correlations.some((correlation) => correlation.correlation_type === 'same_actor' && correlation.confidence_score >= 0.8)) {
+      return 'actor_group';
+    }
+
+    if (correlations.some((correlation) => correlation.correlation_type === 'same_campaign' && correlation.confidence_score >= 0.8)) {
+      return 'campaign';
+    }
+
     const typeFrequency = new Map<CorrelationType, number>();
     
     correlations.forEach(correlation => {
@@ -1066,7 +1086,21 @@ export class ThreatCorrelationService {
   }
 
   private storeCorrelations(threatId: string, correlations: ThreatCorrelation[]): void {
-    this.correlations.set(threatId, correlations);
+    const existing = this.correlations.get(threatId) || [];
+    const mergedByRelation = new Map<string, ThreatCorrelation>();
+
+    for (const correlation of [...existing, ...correlations]) {
+      const relationKey = `${correlation.related_threat_id}:${correlation.correlation_type}`;
+      const current = mergedByRelation.get(relationKey);
+      if (!current || correlation.confidence_score > current.confidence_score) {
+        mergedByRelation.set(relationKey, correlation);
+      }
+    }
+
+    const merged = Array.from(mergedByRelation.values())
+      .sort((left, right) => right.confidence_score - left.confidence_score);
+
+    this.correlations.set(threatId, merged);
   }
 
   private async processQueue(): Promise<void> {

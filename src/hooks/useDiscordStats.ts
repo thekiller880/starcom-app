@@ -23,8 +23,10 @@ export const useDiscordStats = (
 ): UseDiscordStats => {
   const {
     autoRefresh = true,
-    refreshInterval = 30 * 1000, // 30 seconds default (Discord updates frequently)
+    refreshInterval = process.env.NODE_ENV === 'development' ? 30 * 1000 : 120 * 1000,
   } = options;
+
+  const verboseLogs = process.env.NODE_ENV === 'development';
 
   const [stats, setStats] = useState<DiscordServerStats | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -36,7 +38,9 @@ export const useDiscordStats = (
       setIsLoading(true);
       setError(null);
 
-      console.log('🔄 Discord: Fetching server stats...');
+      if (verboseLogs) {
+        console.log('🔄 Discord: Fetching server stats...');
+      }
       const serverStats = await DiscordService.getServerStats();
       
       // Use functional state update to avoid dependency on stats
@@ -65,10 +69,12 @@ export const useDiscordStats = (
       });
       
       setLastUpdated(new Date());
-      console.log('🎉 Discord: Server stats fetch completed successfully', {
-        onlineCount: serverStats.presence_count,
-        memberCount: serverStats.members.length
-      });
+      if (verboseLogs) {
+        console.log('🎉 Discord: Server stats fetch completed successfully', {
+          onlineCount: serverStats.presence_count,
+          memberCount: serverStats.members.length
+        });
+      }
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
@@ -77,7 +83,7 @@ export const useDiscordStats = (
     } finally {
       setIsLoading(false);
     }
-  }, []); // Remove stats dependency to prevent infinite loops
+  }, [verboseLogs]); // Remove stats dependency to prevent infinite loops
 
   const refresh = useCallback(async () => {
     await fetchStats(); // Force refresh

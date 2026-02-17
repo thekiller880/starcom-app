@@ -1,0 +1,42 @@
+{
+  "generatedAt": "2026-02-14T19:28:48.382Z",
+  "status": "pass",
+  "rows": [
+    {
+      "lod": 0,
+      "triangles": 5614,
+      "triangleBudget": 50000,
+      "gzipBytes": 194499,
+      "brotliBytes": 116631,
+      "transferBudget": 921600,
+      "decodeUploadMs": 2.263,
+      "decodeBudgetMs": 80,
+      "status": "pass",
+      "failures": []
+    },
+    {
+      "lod": 1,
+      "triangles": 10375,
+      "triangleBudget": 120000,
+      "gzipBytes": 342792,
+      "brotliBytes": 199832,
+      "transferBudget": 2306867,
+      "decodeUploadMs": 8.139,
+      "decodeBudgetMs": 180,
+      "status": "pass",
+      "failures": []
+    },
+    {
+      "lod": 2,
+      "triangles": 19661,
+      "triangleBudget": 240000,
+      "gzipBytes": 626700,
+      "brotliBytes": 356161,
+      "transferBudget": 4718592,
+      "decodeUploadMs": 13.671,
+      "decodeBudgetMs": 350,
+      "status": "pass",
+      "failures": []
+    }
+  ]
+}

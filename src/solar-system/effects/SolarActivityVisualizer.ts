@@ -344,6 +344,7 @@ export class SolarActivityVisualizer {
     flareState.material = particles.material as THREE.PointsMaterial;
     this.scene.add(particles);
     this.activeFlares.set(flare.id, flareState);
+    this.updatePerformanceStats();
   }
 
   private removeFlare(flareId: string): void {
@@ -359,6 +360,7 @@ export class SolarActivityVisualizer {
     }
 
     this.activeFlares.delete(flareId);
+    this.updatePerformanceStats();
   }
 
   private startAnimation(): void {

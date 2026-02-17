@@ -8,6 +8,13 @@
 
 import { ChatProviderCapabilities } from './ProtocolTypes';
 
+export type ChatProviderType = 'gun' | 'nostr' | 'secure' | 'unified';
+
+export interface ChatProviderConfig {
+  type: ChatProviderType;
+  options?: Record<string, unknown>;
+}
+
 /**
  * Connection status of a chat provider.
  */

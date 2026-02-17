@@ -10,8 +10,7 @@ import {
   IntelQueryOptions,
   Relationship,
   NodeEntity,
-  EdgeRelationship,
-  ClassificationLevel
+  EdgeRelationship
 } from '../types/intelDataModels';
 import { enhancedEventEmitter } from '../events/enhancedEventEmitter';
 import { storageOrchestrator } from '../storage/storageOrchestrator';
@@ -28,7 +27,6 @@ export interface NetworkNode {
   notes?: string;
   tags: string[];
   sourceReferences: string[];
-  classification: ClassificationLevel;
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -47,7 +45,6 @@ export interface NetworkEdge {
   notes?: string;
   tags: string[];
   sourceReferences: string[];
-  classification: ClassificationLevel;
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -197,7 +194,6 @@ export class NetRunnerAdapter {
       notes: nodeEntity.description,
       tags: nodeEntity.tags || [],
       sourceReferences: nodeEntity.sourceReferences || [],
-      classification: nodeEntity.classification,
       createdAt: nodeEntity.createdAt,
       updatedAt: nodeEntity.updatedAt,
       createdBy: nodeEntity.createdBy,
@@ -221,7 +217,6 @@ export class NetRunnerAdapter {
       notes: edgeRelationship.description,
       tags: edgeRelationship.tags || [],
       sourceReferences: edgeRelationship.sourceReferences || [],
-      classification: edgeRelationship.classification,
       createdAt: edgeRelationship.createdAt,
       updatedAt: edgeRelationship.updatedAt,
       createdBy: edgeRelationship.createdBy,
@@ -243,7 +238,6 @@ export class NetRunnerAdapter {
       category: networkNode.category,
       importance: networkNode.importance,
       properties: networkNode.properties,
-      classification: networkNode.classification,
       sourceReferences: networkNode.sourceReferences,
       tags: networkNode.tags,
       createdAt: networkNode.createdAt,
@@ -270,7 +264,6 @@ export class NetRunnerAdapter {
       weight: networkEdge.weight,
       directed: networkEdge.directed,
       properties: networkEdge.properties,
-      classification: networkEdge.classification,
       sourceReferences: networkEdge.sourceReferences,
       confidence: networkEdge.confidence,
       tags: networkEdge.tags,
@@ -482,7 +475,6 @@ export class NetRunnerAdapter {
       if (updates.notes) nodeUpdates.description = updates.notes;
       if (updates.tags) nodeUpdates.tags = updates.tags;
       if (updates.sourceReferences) nodeUpdates.sourceReferences = updates.sourceReferences;
-      if (updates.classification) nodeUpdates.classification = updates.classification;
       if (updates.metadata) nodeUpdates.metadata = updates.metadata;
       
       if (updates.confidence) {
@@ -529,7 +521,6 @@ export class NetRunnerAdapter {
       if (updates.notes) edgeUpdates.description = updates.notes;
       if (updates.tags) edgeUpdates.tags = updates.tags;
       if (updates.sourceReferences) edgeUpdates.sourceReferences = updates.sourceReferences;
-      if (updates.classification) edgeUpdates.classification = updates.classification;
       if (updates.metadata) edgeUpdates.metadata = updates.metadata;
       
       // Update the relationship

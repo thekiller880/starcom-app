@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import styles from './CyberCommandHUDLayout.module.css';
 import CyberCommandTopBar from '../../components/HUD/Bars/CyberCommandTopBar/CyberCommandTopBar';
-import CyberCommandLeftSideBar from '../../components/HUD/Bars/CyberCommandLeftSideBar/CyberCommandLeftSideBar';
-import CyberCommandRightSideBar from '../../components/HUD/Bars/CyberCommandRightSideBar/CyberCommandRightSideBar';
+import CyberCommandLeftSideRail from '../../components/HUD/Bars/CyberCommandRails/CyberCommandLeftSideRail';
+import CyberCommandLeftSideSubRail from '../../components/HUD/Bars/CyberCommandRails/CyberCommandLeftSideSubRail';
+import CyberCommandRightSideRail from '../../components/HUD/Bars/CyberCommandRails/CyberCommandRightSideRail';
 import CyberCommandTopLeftCorner from '../../components/HUD/Corners/CyberCommandTopLeft/CyberCommandTopLeft';
 import CyberCommandTopRightCorner from '../../components/HUD/Corners/CyberCommandTopRight/CyberCommandTopRight';
 import CyberCommandBottomLeftCorner from '../../components/HUD/Corners/CyberCommandBottomLeft/CyberCommandBottomLeft';
@@ -25,6 +26,8 @@ import PerformanceOptimizer from '../../components/Optimization/PerformanceOptim
 import SecurityHardening from '../../components/Optimization/SecurityHardening';
 import { useFeatureFlag } from '../../utils/featureFlags';
 import { GlobeLoadingProvider } from '../../context/GlobeLoadingContext';
+import { useVisualizationMode } from '../../context/VisualizationModeContext';
+import { useSpaceWeatherSidebarLayout } from '../../components/SpaceWeather/SpaceWeatherSidebarLayout';
 // SecureChatManager removed per legacy chat Stage 1 unmount
 
 interface CyberCommandHUDLayoutProps {
@@ -33,6 +36,12 @@ interface CyberCommandHUDLayoutProps {
 
 const CyberCommandHUDLayout: React.FC<CyberCommandHUDLayoutProps> = ({ isEmbedded = false }) => {
   const [showQuickAccess, setShowQuickAccess] = useState(false);
+  const { visualizationMode } = useVisualizationMode();
+  const sidebarLayout = useSpaceWeatherSidebarLayout();
+  const showLeftSubRail =
+    visualizationMode.mode === 'EcoNatural' &&
+    visualizationMode.subMode === 'SpaceWeather' &&
+    sidebarLayout.isSpaceWeatherActive;
   
   // Core feature flags
   const enhancedCenterEnabled = useFeatureFlag('enhancedCenter');
@@ -66,7 +75,7 @@ const CyberCommandHUDLayout: React.FC<CyberCommandHUDLayoutProps> = ({ isEmbedde
 
   const AdaptiveProvider = enhancedAdaptiveEnabled ? EnhancedAdaptiveInterfaceProvider : AdaptiveInterfaceProvider;
 
-  const HUDContent = () => (
+  const hudContent = (
     <GlobeLoadingProvider>
         <AdaptiveProvider>
           <AdaptiveUIController>
@@ -84,9 +93,12 @@ const CyberCommandHUDLayout: React.FC<CyberCommandHUDLayoutProps> = ({ isEmbedde
                     
                     {/* Removed non-functional CyberCommandBottomBar - MainBottomBar handles navigation now */}
                     
-                    <div className={styles.leftSideBar}><CyberCommandLeftSideBar /></div>
-                    <div className={styles.rightSideBar}><CyberCommandRightSideBar /></div>
-                    <div className={`${styles.center} ${isEmbedded ? styles.embeddedCenter : ''}`}>
+                    <div className={styles.leftSideBar}><CyberCommandLeftSideRail /></div>
+                    {showLeftSubRail && (
+                      <div className={styles.leftSubRail}><CyberCommandLeftSideSubRail /></div>
+                    )}
+                    <div className={styles.rightSideBar}><CyberCommandRightSideRail /></div>
+                    <div className={`${styles.center} ${showLeftSubRail ? styles.centerWithSubRail : styles.centerNoSubRail} ${isEmbedded ? styles.embeddedCenter : ''}`}>
                       {enhancedCenterEnabled ? (
                         <CyberCommandCenterManager globeOnly={isEmbedded} />
                       ) : (
@@ -131,7 +143,7 @@ const CyberCommandHUDLayout: React.FC<CyberCommandHUDLayoutProps> = ({ isEmbedde
 
   // For embedded mode, use a simplified wrapper
   if (isEmbedded) {
-    return <HUDContent />;
+    return hudContent;
   }
 
   // Phase 4 Integration: Wrap with gaming enhancements if enabled
@@ -140,7 +152,7 @@ const CyberCommandHUDLayout: React.FC<CyberCommandHUDLayoutProps> = ({ isEmbedde
     return (
       <Phase4Integration>
         <Phase5Integration>
-          <HUDContent />
+          {hudContent}
           
           {/* Core Components that exist outside the main HUD */}
           <NotificationSystem />
@@ -157,7 +169,7 @@ const CyberCommandHUDLayout: React.FC<CyberCommandHUDLayoutProps> = ({ isEmbedde
   if (phase4EnabledFlag) {
     return (
       <Phase4Integration>
-        <HUDContent />
+        {hudContent}
         <NotificationSystem />
         {performanceMonitoringEnabled && <PerformanceOptimizer />}
         {securityHardeningEnabled && <SecurityHardening />}
@@ -169,7 +181,7 @@ const CyberCommandHUDLayout: React.FC<CyberCommandHUDLayoutProps> = ({ isEmbedde
   if (phase5EnabledFlag) {
     return (
       <Phase5Integration>
-        <HUDContent />
+        {hudContent}
         <NotificationSystem />
         {performanceMonitoringEnabled && <PerformanceOptimizer />}
         {securityHardeningEnabled && <SecurityHardening />}
@@ -180,7 +192,7 @@ const CyberCommandHUDLayout: React.FC<CyberCommandHUDLayoutProps> = ({ isEmbedde
   // Default case - no phase enhancements
   return (
     <>
-      <HUDContent />
+      {hudContent}
       <NotificationSystem />
       {performanceMonitoringEnabled && <PerformanceOptimizer />}
       {securityHardeningEnabled && <SecurityHardening />}

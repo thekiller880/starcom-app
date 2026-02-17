@@ -11,7 +11,7 @@
 
 export type VisualizationType = 
   | 'IntelReports'
-  | 'NetworkInfrastructure' 
+  | 'Satellites' 
   | 'CyberThreats'
   | 'CommHubs'
   | 'CyberAttacks';
@@ -242,8 +242,8 @@ export const DEFAULT_VISUALIZATION_SETTINGS: Record<VisualizationType, Visualiza
       showThreatActors: true
     }
   },
-  NetworkInfrastructure: {
-    type: 'NetworkInfrastructure',
+  Satellites: {
+    type: 'Satellites',
     enabled: true,
     opacity: 60,
     refreshInterval: 300000, // Less frequent - infrastructure changes slowly
@@ -283,7 +283,7 @@ export const DEFAULT_VISUALIZATION_SETTINGS: Record<VisualizationType, Visualiza
 // =============================================================================
 
 export function isValidVisualizationType(type: string): type is VisualizationType {
-  return ['IntelReports', 'NetworkInfrastructure', 'CyberThreats', 'CommHubs', 'CyberAttacks'].includes(type);
+  return ['IntelReports', 'Satellites', 'CyberThreats', 'CommHubs', 'CyberAttacks'].includes(type);
 }
 
 export function isValidPriority(priority: string): priority is 'low' | 'medium' | 'high' | 'critical' {

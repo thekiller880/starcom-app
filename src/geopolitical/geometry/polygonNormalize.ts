@@ -45,11 +45,10 @@ export function splitRingAtDateline(ring: LngLat[]): LngLat[][] {
     pushPoint(a);
     const cross = crossesDateline(a[0], b[0]);
     if (cross) {
-      // Insert intersection at ±180.
-      const seamLon = datelineSeamLon(a[0], b[0]);
-      const t = (seamLon - a[0]) / (b[0] - a[0]);
-      const lat = a[1] + t * (b[1] - a[1]);
-      const seamPoint: LngLat = [seamLon, lat];
+      const seamPoint = computeDatelineIntersection(a, b);
+      if (!seamPoint) {
+        continue;
+      }
       current.push(seamPoint);
       commit();
       // Start new part with seam point (to maintain continuity) -> will proceed with b in next loop iter.
@@ -105,9 +104,28 @@ function crossesDateline(lonA: number, lonB: number): boolean {
 }
 
 function datelineSeamLon(lonA: number, lonB: number): number {
-  // If going eastward (positive delta > 180) we crossed from high positive to high negative -> seam at +180
+  // If going eastward (positive delta > 180) we crossed from high negative to high positive -> seam at -180
   const d = lonB - lonA;
-  return d > 180 ? 180 : d < -180 ? -180 : lonB; // fallback
+  return d > 180 ? -180 : d < -180 ? 180 : lonB; // fallback
+}
+
+function computeDatelineIntersection(a: LngLat, b: LngLat): LngLat | null {
+  let lonA = normalizeLon180(a[0]);
+  let lonB = normalizeLon180(b[0]);
+  const delta = lonB - lonA;
+  if (!(delta > 180 || delta < -180)) return null;
+
+  const seamLon = datelineSeamLon(lonA, lonB);
+  if (delta > 180) lonB -= 360;
+  else if (delta < -180) lonB += 360;
+
+  const denom = lonB - lonA;
+  if (Math.abs(denom) < 1e-12) return null;
+
+  const t = (seamLon - lonA) / denom;
+  const clampedT = Math.max(0, Math.min(1, t));
+  const lat = a[1] + clampedT * (b[1] - a[1]);
+  return [seamLon, lat];
 }
 
 // High-level convenience: for a feature outer ring, if span > 180 returns split parts; else returns original.
@@ -117,15 +135,23 @@ export interface NormalizedRingResult {
   span: number;
 }
 
-// Detect polar rings (e.g., Antarctica) to avoid aggressive splitting that distorts geometry.
-// Heuristic: large span (>300) and high-lat coverage beyond ±60 for majority of vertices.
+// Detect true Antarctic-style polar caps to avoid aggressive splitting that distorts geometry.
+// Restrict to southern hemisphere so high-lat northern countries (e.g. Canada) still split correctly.
 function isPolarRing(ring: LngLat[]): boolean {
   if (ring.length < 4) return false;
   const span = ringLongitudeSpan(ring);
   if (span < 300) return false;
-  let highLatCount = 0;
-  for (const [, lat] of ring) if (Math.abs(lat) > 60) highLatCount++;
-  return highLatCount / ring.length > 0.5; // majority high-lat
+  let southHighLatCount = 0;
+  let minLat = 90;
+  let maxLat = -90;
+  for (const [, lat] of ring) {
+    if (lat < -60) southHighLatCount++;
+    if (lat < minLat) minLat = lat;
+    if (lat > maxLat) maxLat = lat;
+  }
+  const southDominant = southHighLatCount / ring.length > 0.5;
+  // Require clear southern-cap footprint (deep south and never approaching tropical latitudes)
+  return southDominant && minLat < -75 && maxLat < -45;
 }
 
 export function normalizeOuterRingDetailed(ring: LngLat[]): NormalizedRingResult {

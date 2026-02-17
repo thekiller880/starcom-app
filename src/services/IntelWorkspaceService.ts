@@ -16,7 +16,7 @@ import {
   FileOperationOptions,
   SearchOptions,
   SearchResult
-} from '../types/intel-foundation';
+} from '../types/IntelWorkspace';
 import type { IntelReportUI } from '../types/intel/IntelReportUI';
 import { serializeReport, parseReport } from './intel/serialization/intelReportSerialization';
 

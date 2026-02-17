@@ -465,14 +465,23 @@ class PerformanceOptimizationManager {
    * End tracking performance for an operation
    */
   endOperation(operationId: string, additionalMetrics: Partial<PerformanceMetrics> = {}): PerformanceMetrics | null {
-    const parts = operationId.split('-');
-    const operationType = parts[0];
-    const startTime = parseInt(parts[1], 10);
+    const activeOperation = this.activeOperations.get(operationId);
+    if (!activeOperation) {
+      console.warn(`Operation ${operationId} not found in active operations`);
+      return null;
+    }
+
+    const operationType = activeOperation.type;
     
     // Find the operation in our metrics array
-    const operationIndex = this.performanceMetrics.findIndex(
-      m => m.operationType === operationType && m.startTime === startTime
-    );
+    let operationIndex = -1;
+    for (let i = this.performanceMetrics.length - 1; i >= 0; i--) {
+      const metric = this.performanceMetrics[i];
+      if (metric.operationType === operationType && metric.endTime === 0) {
+        operationIndex = i;
+        break;
+      }
+    }
     
     if (operationIndex === -1) {
       console.warn(`Operation ${operationId} not found in metrics`);
@@ -485,6 +494,7 @@ class PerformanceOptimizationManager {
     
     // Add additional metrics
     Object.assign(metrics, additionalMetrics);
+    this.activeOperations.delete(operationId);
     
     // Check if this was a slow operation
     if (metrics.duration > this.slowOperationThreshold) {

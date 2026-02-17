@@ -1,0 +1,61 @@
+{
+  "generatedAt": "2026-02-14T19:26:32.779Z",
+  "sourceDir": "/Users/jono/Documents/GitHub/starcom-app/public/geopolitical",
+  "provider": "natural-earth",
+  "status": "pass",
+  "datasets": [
+    {
+      "id": "world-borders",
+      "version": "2025.08.09",
+      "file": "world-borders.geojson",
+      "sha256": "d605dba07ddb045309a2645321117458960ead087475d92a65dc0e0d15bc8289",
+      "license": "Public Domain (Natural Earth)",
+      "updated": "2025-08-09",
+      "filePath": "/Users/jono/Documents/GitHub/starcom-app/public/geopolitical/world-borders.geojson",
+      "exists": true,
+      "actualSha256": "d605dba07ddb045309a2645321117458960ead087475d92a65dc0e0d15bc8289",
+      "shaMatch": true
+    },
+    {
+      "id": "world-territories",
+      "version": "2025.08.09",
+      "file": "world-territories.geojson",
+      "sha256": "303b336554353d12f609c4a48897ed3feb379ee8c1c59c6c203b5f876c9c2406",
+      "license": "Public Domain (Natural Earth / derived)",
+      "updated": "2025-08-09",
+      "filePath": "/Users/jono/Documents/GitHub/starcom-app/public/geopolitical/world-territories.geojson",
+      "exists": true,
+      "actualSha256": "303b336554353d12f609c4a48897ed3feb379ee8c1c59c6c203b5f876c9c2406",
+      "shaMatch": true
+    }
+  ],
+  "lodCoverage": [
+    {
+      "lod": 0,
+      "territories": "/Users/jono/Documents/GitHub/starcom-app/public/geopolitical/world-territories-lod0.geojson",
+      "borders": "/Users/jono/Documents/GitHub/starcom-app/public/geopolitical/world-borders-lod0.geojson",
+      "territoriesExists": true,
+      "bordersExists": true
+    },
+    {
+      "lod": 1,
+      "territories": "/Users/jono/Documents/GitHub/starcom-app/public/geopolitical/world-territories-lod1.geojson",
+      "borders": "/Users/jono/Documents/GitHub/starcom-app/public/geopolitical/world-borders-lod1.geojson",
+      "territoriesExists": true,
+      "bordersExists": true
+    },
+    {
+      "lod": 2,
+      "territories": "/Users/jono/Documents/GitHub/starcom-app/public/geopolitical/world-territories-lod2.geojson",
+      "borders": "/Users/jono/Documents/GitHub/starcom-app/public/geopolitical/world-borders-lod2.geojson",
+      "territoriesExists": true,
+      "bordersExists": true
+    }
+  ],
+  "issues": [],
+  "summary": {
+    "datasets": 2,
+    "errors": 0,
+    "warnings": 0
+  }
+}

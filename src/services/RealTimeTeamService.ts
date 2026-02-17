@@ -53,10 +53,11 @@ class RealTimeTeamService {
     minIntervalMs: 2000,
     onEvent: (event) => this.emitBackoffEvent(event)
   });
-  private syncIntervalMs = 30000;
+  private syncIntervalMs = process.env.NODE_ENV === 'development' ? 30000 : 120000;
   private syncTimer?: ReturnType<typeof setTimeout>;
   private syncInProgress = false;
   private paused = false;
+  private readonly verboseSyncLogs = process.env.NODE_ENV === 'development';
 
   constructor() {
     this.loadPersistedData();
@@ -465,7 +466,9 @@ class RealTimeTeamService {
   private async syncWithPublicInfrastructure(): Promise<void> {
     try {
       // ✅ IMPLEMENTATION: Real-time team sync using Nostr events and IPFS content addressing
-      console.log('🔄 Starting real-time team sync with public infrastructure...');
+      if (this.verboseSyncLogs) {
+        console.log('🔄 Starting real-time team sync with public infrastructure...');
+      }
       
       const syncStartTime = Date.now();
       const syncResults = {
@@ -490,10 +493,12 @@ class RealTimeTeamService {
       
       const syncDuration = Date.now() - syncStartTime;
       
-      console.log('✅ Real-time sync completed:', {
-        duration: `${syncDuration}ms`,
-        results: syncResults
-      });
+      if (this.verboseSyncLogs) {
+        console.log('✅ Real-time sync completed:', {
+          duration: `${syncDuration}ms`,
+          results: syncResults
+        });
+      }
       
       // Emit comprehensive sync event
       this.emit('sync-completed', { 
@@ -536,11 +541,13 @@ class RealTimeTeamService {
         };
 
         // In production, this would use the actual Nostr service
-        console.log('📡 Publishing team update to Nostr:', {
-          teamId,
-          memberCount: team.members.length,
-          eventKind: teamEvent.kind
-        });
+        if (this.verboseSyncLogs) {
+          console.log('📡 Publishing team update to Nostr:', {
+            teamId,
+            memberCount: team.members.length,
+            eventKind: teamEvent.kind
+          });
+        }
         
         syncResults.nostrEvents++;
       }
@@ -578,16 +585,20 @@ class RealTimeTeamService {
         // Check if we already have this content version
         const existingHash = this.contentHashCache.get(investigationId);
         if (existingHash === contentHash) {
-          console.log(`⚡ Skipping IPFS sync for ${investigationId} - no changes`);
+          if (this.verboseSyncLogs) {
+            console.log(`⚡ Skipping IPFS sync for ${investigationId} - no changes`);
+          }
           continue;
         }
 
         // In production, this would use the IPFS service
-        console.log('📦 Storing investigation data to IPFS:', {
-          investigationId,
-          contentHash: contentHash.slice(0, 16) + '...',
-          dataSize: JSON.stringify(investigationData).length
-        });
+        if (this.verboseSyncLogs) {
+          console.log('📦 Storing investigation data to IPFS:', {
+            investigationId,
+            contentHash: contentHash.slice(0, 16) + '...',
+            dataSize: JSON.stringify(investigationData).length
+          });
+        }
 
         // Update cache
         this.contentHashCache.set(investigationId, contentHash);

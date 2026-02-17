@@ -9,7 +9,7 @@
  * Full feature implementation will follow in subsequent iterations.
  */
 
-import { ExportOptions } from '../types/intel-foundation';
+import { ExportOptions } from '../types/DataVault';
 
 // Simplified data types for the service
 export interface IntelItem {

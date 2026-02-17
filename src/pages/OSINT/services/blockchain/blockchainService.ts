@@ -240,7 +240,7 @@ class BlockchainService {
     try {
       // If in development and no real backend, return mock data
       if (process.env.NODE_ENV === 'development') {
-        return this.getMockTransactions(query, options.network);
+        return this.getMockTransactions(query, options);
       }
       
       const params = new URLSearchParams();
@@ -278,7 +278,7 @@ class BlockchainService {
       console.error('Error searching transactions:', error);
       // In development, return mock data instead of error
       if (process.env.NODE_ENV === 'development') {
-        return this.getMockTransactions(query, options.network);
+        return this.getMockTransactions(query, options);
       }
       
       return createErrorDetail(

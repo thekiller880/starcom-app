@@ -108,7 +108,22 @@ export class EnhancedEventEmitter {
   /**
    * Emit an event
    */
-  emit(event: DataEvent): void {
+  emit(event: DataEvent): void;
+  emit(topic: string, data: Record<string, unknown>): void;
+  emit(eventOrTopic: DataEvent | string, data?: Record<string, unknown>): void {
+    const event: DataEvent = typeof eventOrTopic === 'string'
+      ? {
+          id: uuidv4(),
+          type: 'update',
+          topic: eventOrTopic,
+          timestamp: new Date().toISOString(),
+          entityId: 'generic',
+          entityType: 'event',
+          data: data || {},
+          source: 'system'
+        }
+      : eventOrTopic;
+
     // Add to history
     this.addToHistory(event);
     

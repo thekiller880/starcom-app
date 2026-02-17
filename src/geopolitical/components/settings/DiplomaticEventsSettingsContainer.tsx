@@ -1,5 +1,5 @@
 import React from 'react';
-import { useGeoPoliticalSettings } from '../../../../hooks/useGeoPoliticalSettings';
+import { useGeoPoliticalSettings } from '../../../hooks/useGeoPoliticalSettings';
 
 // Placeholder MVP container for Diplomatic Events
 // Advanced controls (time scrub, clustering) will be added later
@@ -13,7 +13,7 @@ export const DiplomaticEventsSettingsContainer: React.FC = () => {
       <fieldset className="gp-settings-fieldset">
         <legend>Event Types</legend>
         {Object.entries(de.eventTypes).map(([key, val]) => (
-          <label key={key}><input type="checkbox" checked={val} onChange={e=>updateDiplomaticEvents({ eventTypes: { ...de.eventTypes, [key]: e.target.checked } })} /> {key}</label>
+          <label key={key}><input type="checkbox" checked={Boolean(val)} onChange={e=>updateDiplomaticEvents({ eventTypes: { ...de.eventTypes, [key]: e.target.checked } })} /> {key}</label>
         ))}
       </fieldset>
       <label className="gp-settings-label">Time Range {de.timeRange}d

@@ -107,6 +107,7 @@ export const useDraggableMarquee = (
   physics: DragPhysics = DEFAULT_PHYSICS,
   callbacks?: DragCallbacks
 ): UseDraggableMarqueeReturn => {
+  const isDevelopment = process.env.NODE_ENV === 'development';
   const [dragState, setDragState] = useState<DragState>({
     isDragging: false,
     dragStartX: 0,
@@ -123,10 +124,38 @@ export const useDraggableMarquee = (
   const [hasStarted, setHasStarted] = useState(false);
   const [emergencyMode, setEmergencyMode] = useState(false);
   const momentumAnimationRef = useRef<number>();
+  const dragStateRef = useRef<DragState>(dragState);
+  const dragStateRafRef = useRef<number | null>(null);
+  const pendingDragStateRef = useRef<DragState | null>(null);
+  const momentumLastFrameRef = useRef<number>(0);
   const lastPositionRef = useRef({ x: 0, y: 0 });
   const velocityHistoryRef = useRef<number[]>([]);
   const performanceTimerRef = useRef<number>();
   const eventListenerCleanupRef = useRef<(() => void)[]>([]);
+  const isMobileDeviceRef = useRef<boolean>(
+    typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android|Mobile|webOS/i.test(navigator.userAgent)
+  );
+  const momentumFrameIntervalMs = isMobileDeviceRef.current ? 50 : 33;
+
+  useEffect(() => {
+    dragStateRef.current = dragState;
+  }, [dragState]);
+
+  const commitDragState = useCallback((nextState: DragState) => {
+    pendingDragStateRef.current = nextState;
+
+    if (dragStateRafRef.current !== null) {
+      return;
+    }
+
+    dragStateRafRef.current = requestAnimationFrame(() => {
+      dragStateRafRef.current = null;
+      if (pendingDragStateRef.current) {
+        setDragState(pendingDragStateRef.current);
+        pendingDragStateRef.current = null;
+      }
+    });
+  }, []);
 
   // Scroll-specific emergency recovery system
   const activateScrollEmergencyMode = useCallback(() => {
@@ -194,8 +223,8 @@ export const useDraggableMarquee = (
   // Calculate horizontal scroll velocity with device-aware and improved timing
   const calculateScrollVelocity = useCallback((currentX: number, currentTime: number) => {
     if (emergencyMode) return 0; // No velocity during emergency mode
-    
-    const timeDelta = currentTime - dragState.lastMoveTime;
+
+    const timeDelta = currentTime - dragStateRef.current.lastMoveTime;
     
     // Edge case: Handle zero or negative time delta for scroll
     // Use minimum 1ms to prevent division by zero
@@ -237,7 +266,7 @@ export const useDraggableMarquee = (
     
     const avgScrollVelocity = validScrollVelocities.reduce((sum, v) => sum + v, 0) / validScrollVelocities.length;
     return isFinite(avgScrollVelocity) ? avgScrollVelocity : 0;
-  }, [dragState.lastMoveTime, emergencyMode]);
+  }, [emergencyMode]);
 
   // Apply horizontal scroll boundaries with scroll-specific edge case handling
   const applyScrollBoundaries = useCallback((scrollX: number, scrollY: number) => {
@@ -360,6 +389,18 @@ export const useDraggableMarquee = (
       velocity *= validatedPhysics.momentumDecay;
       position += velocity;
 
+      if (typeof document !== 'undefined' && document.hidden) {
+        momentumAnimationRef.current = requestAnimationFrame(animate);
+        return;
+      }
+
+      if (currentTime - momentumLastFrameRef.current < momentumFrameIntervalMs) {
+        momentumAnimationRef.current = requestAnimationFrame(animate);
+        return;
+      }
+
+      momentumLastFrameRef.current = currentTime;
+
       // Edge case: Handle invalid position values or NaN propagation
       if (!isFinite(position) || !isFinite(velocity)) {
         console.warn('Invalid momentum values detected, stopping animation');
@@ -376,234 +417,252 @@ export const useDraggableMarquee = (
       }
 
       const constrained = applyScrollBoundaries(position, dragState.currentY);
-      
-      setDragState(prev => ({
-        ...prev,
+
+      const baseState = dragStateRef.current;
+      const nextState: DragState = {
+        ...baseState,
         currentX: constrained.x,
         currentY: constrained.y,
         velocity,
         momentum: Math.abs(velocity),
-      }));
+      };
+
+      commitDragState(nextState);
+      dragStateRef.current = nextState;
 
       lastPositionRef.current = { x: constrained.x, y: constrained.y };
 
       if (Math.abs(velocity) > validatedPhysics.velocityThreshold) {
         momentumAnimationRef.current = requestAnimationFrame(animate);
       } else {
-        handleMomentumEnd(dragState);
+        handleMomentumEnd(nextState);
       }
     };
 
-    try {
-      momentumAnimationRef.current = requestAnimationFrame(animate);
-    } catch (error) {
-      console.error('Failed to start momentum animation:', error);
-      activateScrollEmergencyMode();
-    }
-  }, [dragState, validatedPhysics, callbacks, applyScrollBoundaries, emergencyMode, activateScrollEmergencyMode, handleMomentumEnd]);
+      momentumLastFrameRef.current = 0;
 
-  // Handle drag start with comprehensive input validation and state management
-  const handleDragStart = useCallback((clientX: number, clientY: number) => {
-    if (emergencyMode) {
-      console.log('Drag blocked due to emergency mode');
-      return;
-    }
-    
-    // Edge case: Validate input coordinates with browser-specific checks
-    if (!isFinite(clientX) || !isFinite(clientY)) {
-      console.warn('Invalid drag start coordinates, ignoring drag start');
-      return;
-    }
-
-    // Edge case: Detect rapid successive drag starts (possible input spam)
-    const currentTime = Date.now();
-    if (dragState.lastMoveTime && (currentTime - dragState.lastMoveTime) < 5) {
-      // Reduce throttling slightly, was too aggressive at 10ms
-      return;
-    }
-
-    // Edge case: Validate coordinate ranges (prevent negative coordinates that don't make sense)
-    if (clientX < -10000 || clientY < -10000 || clientX > 20000 || clientY > 20000) {
-      console.warn('Suspicious coordinate values, possible input error:', { clientX, clientY });
-      return;
-    }
-
-    // Cancel any existing momentum animation with cleanup
-    if (momentumAnimationRef.current) {
-      cancelAnimationFrame(momentumAnimationRef.current);
-      momentumAnimationRef.current = undefined;
-    }
-
-    const newState: DragState = {
-      isDragging: true,
-      dragStartX: clientX,
-      dragStartY: clientY,
-      currentX: clientX,
-      currentY: clientY,
-      deltaX: 0,
-      deltaY: 0,
-      velocity: 0,
-      momentum: 0,
-      lastMoveTime: currentTime,
-    };
-
-    setDragState(newState);
-    setHasStarted(true);
-    lastPositionRef.current = { x: clientX, y: clientY };
-    velocityHistoryRef.current = [];
-
-    try {
-      callbacks?.onDragStart?.(newState);
-    } catch (error) {
-      console.error('Error in drag start callback:', error);
-      // Don't break the drag operation for callback errors
-    }
-  }, [callbacks, dragState.lastMoveTime, emergencyMode]);
-
-  // Handle drag move with advanced validation and performance monitoring
-  const handleDragMove = useCallback((clientX: number, clientY: number) => {
-    if (!dragState.isDragging || emergencyMode) return;
-
-    // Edge case: Validate input coordinates
-    if (!isFinite(clientX) || !isFinite(clientY)) {
-      console.warn('Invalid drag move coordinates, ignoring move event');
-      return;
-    }
-
-    const currentTime = Date.now();
-    
-    // Edge case: Prevent rapid-fire events with same timestamp
-    if (currentTime === dragState.lastMoveTime) return;
-
-    // Edge case: Detect impossible movement speed (device-aware thresholds)
-    const timeDelta = currentTime - dragState.lastMoveTime;
-    
-    // Require minimum time delta for meaningful velocity calculation
-    if (timeDelta < 5) return; // Skip events that are too close together
-    
-    const distance = Math.sqrt(
-      Math.pow(clientX - lastPositionRef.current.x, 2) + 
-      Math.pow(clientY - lastPositionRef.current.y, 2)
-    );
-    
-    // Use device-aware threshold for movement validation
-    const movementThreshold = DEVICE_CALIBRATION.getMovementThreshold();
-    if (timeDelta > 0 && distance / timeDelta > movementThreshold) {
-      // Only warn for truly extreme movements (3x threshold), significantly reduce console spam
-      if (distance / timeDelta > movementThreshold * 3) {
-        console.warn('Extreme movement speed detected:', Math.round(distance / timeDelta), 'px/ms (threshold:', movementThreshold, ')');
-        SCROLL_EDGE_MONITOR.reportScrollIssue('extremeOffset');
-      }
-      // Still allow the movement - just log for debugging
-    }
-
-    // Edge case: Detect stuck/frozen input (same coordinates repeatedly)
-    if (clientX === lastPositionRef.current.x && clientY === lastPositionRef.current.y) {
-      return; // Ignore duplicate coordinate events
-    }
-
-    const velocity = calculateScrollVelocity(clientX, currentTime);
-    const constrained = applyScrollBoundaries(clientX, clientY);
-
-    // Calculate incremental movement for scroll offset (not total distance from start)
-    const incrementalX = constrained.x - lastPositionRef.current.x;
-    const incrementalY = constrained.y - lastPositionRef.current.y;
-
-    const newState: DragState = {
-      ...dragState,
-      currentX: constrained.x,
-      currentY: constrained.y,
-      // deltaX should accumulate incremental movements for scroll offset
-      deltaX: dragState.deltaX + incrementalX,
-      deltaY: dragState.deltaY + incrementalY,
-      velocity,
-      lastMoveTime: currentTime,
-    };
-
-    setDragState(newState);
-    lastPositionRef.current = { x: constrained.x, y: constrained.y };
-
-    try {
-      callbacks?.onDragMove?.(newState);
-    } catch (error) {
-      console.error('Error in drag move callback:', error);
-      // Don't break drag operation for callback errors
-    }
-  }, [dragState, calculateScrollVelocity, applyScrollBoundaries, callbacks, emergencyMode]);
-
-  // Handle drag end with comprehensive cleanup and state validation
-  const handleDragEnd = useCallback(() => {
-    if (!dragState.isDragging) return;
-
-    const finalVelocity = dragState.velocity;
-    
-    const endState: DragState = {
-      ...dragState,
-      isDragging: false,
-    };
-
-    setDragState(endState);
-    
-    try {
-      callbacks?.onDragEnd?.(endState);
-    } catch (error) {
-      console.error('Error in drag end callback:', error);
-    }
-
-    // Reset deltaX after callback has processed it
-    setDragState(prev => ({
-      ...prev,
-      deltaX: 0,
-      deltaY: 0,
-    }));
-
-    // Start momentum animation if velocity is sufficient and not in emergency mode
-    if (!emergencyMode) {
-      startScrollMomentumAnimation(finalVelocity);
-    }
-  }, [dragState, callbacks, startScrollMomentumAnimation, emergencyMode]);
-
-  // Reset drag state with comprehensive cleanup
-  const resetDrag = useCallback(() => {
-    if (momentumAnimationRef.current) {
-      cancelAnimationFrame(momentumAnimationRef.current);
-      momentumAnimationRef.current = undefined;
-    }
-
-    // Clean up performance timer
-    if (performanceTimerRef.current) {
-      performanceTimerRef.current = undefined;
-    }
-
-    // Execute any pending cleanup functions
-    eventListenerCleanupRef.current.forEach(cleanup => {
       try {
-        cleanup();
+        momentumAnimationRef.current = requestAnimationFrame(animate);
       } catch (error) {
-        console.error('Error during event listener cleanup:', error);
+        console.error('Failed to start momentum animation:', error);
+        activateScrollEmergencyMode();
       }
-    });
-    eventListenerCleanupRef.current = [];
+    }, [dragState, validatedPhysics, callbacks, applyScrollBoundaries, emergencyMode, activateScrollEmergencyMode, handleMomentumEnd, commitDragState, momentumFrameIntervalMs]);
 
-    setDragState({
-      isDragging: false,
-      dragStartX: 0,
-      dragStartY: 0,
-      currentX: 0,
-      currentY: 0,
-      deltaX: 0,
-      deltaY: 0,
-      velocity: 0,
-      momentum: 0,
-      lastMoveTime: 0,
-    });
-    setHasStarted(false);
-    setEmergencyMode(false);
-    lastPositionRef.current = { x: 0, y: 0 };
-    velocityHistoryRef.current = [];
-    
-    // Reset edge case monitor
-    SCROLL_EDGE_MONITOR.reset();
+    // Handle drag start with comprehensive input validation and state management
+    const handleDragStart = useCallback((clientX: number, clientY: number) => {
+      if (emergencyMode) {
+        if (isDevelopment) {
+          console.log('Drag blocked due to emergency mode');
+        }
+        return;
+      }
+
+      // Edge case: Validate input coordinates with browser-specific checks
+      if (!isFinite(clientX) || !isFinite(clientY)) {
+        console.warn('Invalid drag start coordinates, ignoring drag start');
+        return;
+      }
+
+      // Edge case: Detect rapid successive drag starts (possible input spam)
+      const currentTime = Date.now();
+      if (dragStateRef.current.lastMoveTime && (currentTime - dragStateRef.current.lastMoveTime) < 5) {
+        // Reduce throttling slightly, was too aggressive at 10ms
+        return;
+      }
+
+      // Edge case: Validate coordinate ranges (prevent negative coordinates that don't make sense)
+      if (clientX < -10000 || clientY < -10000 || clientX > 20000 || clientY > 20000) {
+        console.warn('Suspicious coordinate values, possible input error:', { clientX, clientY });
+        return;
+      }
+
+      // Cancel any existing momentum animation with cleanup
+      if (momentumAnimationRef.current) {
+        cancelAnimationFrame(momentumAnimationRef.current);
+        momentumAnimationRef.current = undefined;
+      }
+
+      const newState: DragState = {
+        isDragging: true,
+        dragStartX: clientX,
+        dragStartY: clientY,
+        currentX: clientX,
+        currentY: clientY,
+        deltaX: 0,
+        deltaY: 0,
+        velocity: 0,
+        momentum: 0,
+        lastMoveTime: currentTime,
+      };
+
+      setDragState(newState);
+      dragStateRef.current = newState;
+      setHasStarted(true);
+      lastPositionRef.current = { x: clientX, y: clientY };
+      velocityHistoryRef.current = [];
+
+      try {
+        callbacks?.onDragStart?.(newState);
+      } catch (error) {
+        console.error('Error in drag start callback:', error);
+        // Don't break the drag operation for callback errors
+      }
+    }, [callbacks, emergencyMode, isDevelopment]);
+
+    // Handle drag move with advanced validation and performance monitoring
+    const handleDragMove = useCallback((clientX: number, clientY: number) => {
+      const currentDragState = dragStateRef.current;
+      if (!currentDragState.isDragging || emergencyMode) return;
+
+      // Edge case: Validate input coordinates
+      if (!isFinite(clientX) || !isFinite(clientY)) {
+        console.warn('Invalid drag move coordinates, ignoring move event');
+        return;
+      }
+
+      const currentTime = Date.now();
+
+      // Edge case: Prevent rapid-fire events with same timestamp
+      if (currentTime === currentDragState.lastMoveTime) return;
+
+      // Edge case: Detect impossible movement speed (device-aware thresholds)
+      const timeDelta = currentTime - currentDragState.lastMoveTime;
+
+      // Require minimum time delta for meaningful velocity calculation
+      if (timeDelta < 5) return; // Skip events that are too close together
+
+      const distance = Math.sqrt(
+        Math.pow(clientX - lastPositionRef.current.x, 2) +
+        Math.pow(clientY - lastPositionRef.current.y, 2)
+      );
+
+      // Use device-aware threshold for movement validation
+      const movementThreshold = DEVICE_CALIBRATION.getMovementThreshold();
+      if (timeDelta > 0 && distance / timeDelta > movementThreshold) {
+        // Only warn for truly extreme movements (3x threshold), significantly reduce console spam
+        if (distance / timeDelta > movementThreshold * 3) {
+          console.warn('Extreme movement speed detected:', Math.round(distance / timeDelta), 'px/ms (threshold:', movementThreshold, ')');
+          SCROLL_EDGE_MONITOR.reportScrollIssue('extremeOffset');
+        }
+        // Still allow the movement - just log for debugging
+      }
+
+      // Edge case: Detect stuck/frozen input (same coordinates repeatedly)
+      if (clientX === lastPositionRef.current.x && clientY === lastPositionRef.current.y) {
+        return; // Ignore duplicate coordinate events
+      }
+
+      const velocity = calculateScrollVelocity(clientX, currentTime);
+      const constrained = applyScrollBoundaries(clientX, clientY);
+
+      // Calculate incremental movement for scroll offset (not total distance from start)
+      const incrementalX = constrained.x - lastPositionRef.current.x;
+      const incrementalY = constrained.y - lastPositionRef.current.y;
+
+      const newState: DragState = {
+        ...currentDragState,
+        currentX: constrained.x,
+        currentY: constrained.y,
+        // deltaX should accumulate incremental movements for scroll offset
+        deltaX: currentDragState.deltaX + incrementalX,
+        deltaY: currentDragState.deltaY + incrementalY,
+        velocity,
+        lastMoveTime: currentTime,
+      };
+
+      commitDragState(newState);
+      dragStateRef.current = newState;
+      lastPositionRef.current = { x: constrained.x, y: constrained.y };
+
+      try {
+        callbacks?.onDragMove?.(newState);
+      } catch (error) {
+        console.error('Error in drag move callback:', error);
+        // Don't break drag operation for callback errors
+      }
+    }, [calculateScrollVelocity, applyScrollBoundaries, callbacks, emergencyMode, commitDragState]);
+
+    // Handle drag end with comprehensive cleanup and state validation
+    const handleDragEnd = useCallback(() => {
+      const currentDragState = dragStateRef.current;
+      if (!currentDragState.isDragging) return;
+
+      const finalVelocity = currentDragState.velocity;
+
+      const endState: DragState = {
+        ...currentDragState,
+        isDragging: false,
+      };
+
+      setDragState(endState);
+      dragStateRef.current = endState;
+
+      try {
+        callbacks?.onDragEnd?.(endState);
+      } catch (error) {
+        console.error('Error in drag end callback:', error);
+      }
+
+      // Reset deltaX after callback has processed it
+      setDragState(prev => ({
+        ...prev,
+        deltaX: 0,
+        deltaY: 0,
+      }));
+
+      // Start momentum animation if velocity is sufficient and not in emergency mode
+      if (!emergencyMode) {
+        startScrollMomentumAnimation(finalVelocity);
+      }
+    }, [callbacks, startScrollMomentumAnimation, emergencyMode]);
+
+    const resetDrag = useCallback(() => {
+      if (momentumAnimationRef.current) {
+        cancelAnimationFrame(momentumAnimationRef.current);
+        momentumAnimationRef.current = undefined;
+      }
+      if (dragStateRafRef.current !== null) {
+        cancelAnimationFrame(dragStateRafRef.current);
+        dragStateRafRef.current = null;
+      }
+
+      pendingDragStateRef.current = null;
+
+      if (performanceTimerRef.current) {
+        performanceTimerRef.current = undefined;
+      }
+
+      eventListenerCleanupRef.current.forEach(cleanup => {
+        try {
+          cleanup();
+        } catch (error) {
+          console.error('Error during event listener cleanup:', error);
+        }
+      });
+      eventListenerCleanupRef.current = [];
+
+      const resetState: DragState = {
+        isDragging: false,
+        dragStartX: 0,
+        dragStartY: 0,
+        currentX: 0,
+        currentY: 0,
+        deltaX: 0,
+        deltaY: 0,
+        velocity: 0,
+        momentum: 0,
+        lastMoveTime: 0,
+      };
+
+      setDragState(resetState);
+      dragStateRef.current = resetState;
+      setHasStarted(false);
+      setEmergencyMode(false);
+      lastPositionRef.current = { x: 0, y: 0 };
+      velocityHistoryRef.current = [];
+
+      SCROLL_EDGE_MONITOR.reset();
   }, []);
 
   // Mouse event handlers with error handling
@@ -722,6 +781,9 @@ export const useDraggableMarquee = (
     return () => {
       if (momentumAnimationRef.current) {
         cancelAnimationFrame(momentumAnimationRef.current);
+      }
+      if (dragStateRafRef.current !== null) {
+        cancelAnimationFrame(dragStateRafRef.current);
       }
     };
   }, []);

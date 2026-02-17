@@ -21,10 +21,6 @@ function getDefaultPreferences(): TopBarPreferences {
 // Force refresh preferences if categories have changed significantly
 function shouldResetPreferences(currentPrefs: TopBarPreferences): boolean {
   const currentEnabled = Object.keys(currentPrefs.enabledCategories).filter(id => currentPrefs.enabledCategories[id]);
-  const newDefaultEnabled = TOPBAR_CATEGORIES.filter(cat => cat.defaultEnabled).map(cat => cat.id);
-  
-  // Debug: Log preference comparison
-  console.debug('Preference comparison:', { currentEnabled, newDefaultEnabled });
   
   // Reset if user has old financial-heavy preferences but no energy categories
   const hasEnergyCategories = currentEnabled.some(id => ['commodities', 'energy-security', 'power-grid', 'market-intelligence'].includes(id));
@@ -55,7 +51,7 @@ export function loadPreferences(): TopBarPreferences {
 }
 
 export function useTopBarPreferences() {
-  const [preferences, setPreferences] = useState<TopBarPreferences>(loadPreferences());
+  const [preferences, setPreferences] = useState<TopBarPreferences>(() => loadPreferences());
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));

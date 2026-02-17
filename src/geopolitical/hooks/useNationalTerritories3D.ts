@@ -16,6 +16,62 @@ interface UseNationalTerritoriesParams {
   config: GeoPoliticalConfig['nationalTerritories'];
 }
 
+function isDevRuntime(): boolean {
+  try {
+    if (import.meta.env?.DEV) return true;
+  } catch {
+    // ignore
+  }
+  return process?.env?.NODE_ENV === 'development';
+}
+
+type DeviceTier = 'A' | 'B' | 'C';
+
+export const GEOPOLITICAL_SCENE_COUNTER_OFFSET_RAD = -Math.PI / 2;
+
+export function applyGeoPoliticalSceneCounterOffset(group: THREE.Group): void {
+  group.rotation.y = GEOPOLITICAL_SCENE_COUNTER_OFFSET_RAD;
+  group.updateMatrixWorld(true);
+  group.userData = {
+    ...(group.userData || {}),
+    sceneCounterOffsetRad: GEOPOLITICAL_SCENE_COUNTER_OFFSET_RAD
+  };
+}
+
+function maxLodForDeviceTier(tier: DeviceTier): 0 | 1 | 2 {
+  if (tier === 'A') return 0;
+  if (tier === 'B') return 1;
+  return 2;
+}
+
+function defaultLodForDeviceTier(tier: DeviceTier): 0 | 1 | 2 {
+  if (tier === 'A') return 0;
+  if (tier === 'B') return 1;
+  return 2;
+}
+
+function detectDeviceTier(): DeviceTier {
+  if (typeof window !== 'undefined') {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const forced = params.get('geoDeviceTier')?.toUpperCase();
+      if (forced === 'A' || forced === 'B' || forced === 'C') return forced;
+    } catch {
+      // noop
+    }
+  }
+
+  const nav = typeof navigator !== 'undefined'
+    ? navigator as Navigator & { deviceMemory?: number }
+    : undefined;
+  const cores = nav?.hardwareConcurrency ?? 8;
+  const memory = nav?.deviceMemory;
+
+  if ((typeof memory === 'number' && memory <= 4) || cores <= 4) return 'A';
+  if ((typeof memory === 'number' && memory <= 8) || cores <= 8) return 'B';
+  return 'C';
+}
+
 function pickLOD(distance: number, hysteresis: number, current: 0 | 1 | 2 | null): 0 | 1 | 2 {
   // Base thresholds
   const t0 = 350; // boundary between LOD0 and LOD1
@@ -31,6 +87,47 @@ function pickLOD(distance: number, hysteresis: number, current: 0 | 1 | 2 | null
   return 2;
 }
 
+function fadeInTerritoryMeshes(group: THREE.Group, targetOpacity: number, durationMs = 500) {
+  const meshes: THREE.Mesh[] = [];
+  group.traverse((obj) => {
+    if ((obj as THREE.Mesh).isMesh) {
+      const mesh = obj as THREE.Mesh;
+      if (mesh.material instanceof THREE.MeshBasicMaterial) {
+        mesh.material.transparent = true;
+        mesh.material.opacity = 0;
+        mesh.material.needsUpdate = true;
+        meshes.push(mesh);
+      }
+    }
+  });
+
+  if (meshes.length === 0) {
+    return;
+  }
+
+  const start = performance.now();
+  const easeInOutCubic = (value: number) => (value < 0.5
+    ? 4 * value * value * value
+    : 1 - Math.pow(-2 * value + 2, 3) / 2);
+  const tick = (now: number) => {
+    const t = Math.min(1, (now - start) / durationMs);
+    const eased = easeInOutCubic(t);
+    const opacity = targetOpacity * eased;
+    meshes.forEach((mesh) => {
+      const material = mesh.material;
+      if (material instanceof THREE.MeshBasicMaterial) {
+        material.opacity = opacity;
+        material.needsUpdate = true;
+      }
+    });
+    if (t < 1) {
+      requestAnimationFrame(tick);
+    }
+  };
+
+  requestAnimationFrame(tick);
+}
+
 export function useNationalTerritories3D({ enabled, scene, config }: UseNationalTerritoriesParams) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +136,7 @@ export function useNationalTerritories3D({ enabled, scene, config }: UseNational
   const territoriesGroupRef = useRef<THREE.Group | null>(null);
   // No local UI state presently required
   const currentLODRef = useRef<0 | 1 | 2 | null>(null);
+  const deviceTierRef = useRef<DeviceTier>(detectDeviceTier());
   const cameraRef = useRef<THREE.Camera | null>(null);
   const hysteresis = config.lod?.hysteresis ?? 20;
   const raycasterRef = useRef<THREE.Raycaster | null>(null);
@@ -52,6 +150,8 @@ export function useNationalTerritories3D({ enabled, scene, config }: UseNational
   const pickIntervalMs = 16; // ~60Hz
   const bvhEnabledRef = useRef<boolean>(!!config?.bvhPicking);
   const lastFrameTimeRef = useRef<number>(performance.now());
+  const overBudgetFramesRef = useRef<number>(0);
+  const lastDownshiftAtRef = useRef<number>(0);
   // Simple spatial index for borders: array of segments with AABB in lon/lat
   const borderIndexRef = useRef<BorderIndex | null>(null);
   // Dev-only ID picking pass
@@ -114,10 +214,12 @@ export function useNationalTerritories3D({ enabled, scene, config }: UseNational
       setLoading(true);
   const borders = await nationalTerritoriesService.loadBordersLOD(lod);
       const newBordersGroup = nationalTerritoriesService.buildBorders(borders, config);
+      applyGeoPoliticalSceneCounterOffset(newBordersGroup);
       // We'll build the spatial index after optionally loading maritime features
       if (replace && bordersGroupRef.current) {
         clearGroup(bordersGroupRef.current);
         bordersGroupRef.current.add(...newBordersGroup.children);
+        applyGeoPoliticalSceneCounterOffset(bordersGroupRef.current);
       } else {
         bordersGroupRef.current = newBordersGroup;
         if (!globalLayerRegistry.getStatus('geopolitical-borders')) {
@@ -136,9 +238,11 @@ export function useNationalTerritories3D({ enabled, scene, config }: UseNational
         maritime = await nationalTerritoriesService.loadMaritimeBordersLOD(lod);
         if (maritime && maritime.length) {
           const newMaritimeGroup = nationalTerritoriesService.buildMaritimeBorders(maritime as unknown as ReturnType<typeof nationalTerritoriesService.loadMaritimeBordersLOD> extends Promise<infer T> ? NonNullable<T> : never, config);
+          applyGeoPoliticalSceneCounterOffset(newMaritimeGroup);
           if (replace && maritimeGroupRef.current) {
             clearGroup(maritimeGroupRef.current);
             maritimeGroupRef.current.add(...newMaritimeGroup.children);
+            applyGeoPoliticalSceneCounterOffset(maritimeGroupRef.current);
           } else {
             maritimeGroupRef.current = newMaritimeGroup;
             if (!globalLayerRegistry.getStatus('geopolitical-maritime')) {
@@ -163,8 +267,19 @@ export function useNationalTerritories3D({ enabled, scene, config }: UseNational
     : borders;
   borderIndexRef.current = buildBorderIndex(indexFeatures);
       if (config.territoryColors.opacity > 0) {
-        const territories = await nationalTerritoriesService.loadTerritoriesLOD(lod);
-        const newTerritoriesGroup = nationalTerritoriesService.buildTerritories(territories, config);
+        const territoriesResult = await nationalTerritoriesService.loadTerritoriesLODResolved(lod);
+        console.info('[NationalTerritories] resolved territory source', {
+          lod,
+          source: territoriesResult.kind,
+          count: territoriesResult.kind === 'baked'
+            ? territoriesResult.parts.length
+            : territoriesResult.features.length
+        });
+        const newTerritoriesGroup = territoriesResult.kind === 'baked'
+          ? nationalTerritoriesService.buildTerritoriesFromBaked(territoriesResult.parts, config)
+          : nationalTerritoriesService.buildTerritories(territoriesResult.features, config);
+        applyGeoPoliticalSceneCounterOffset(newTerritoriesGroup);
+        fadeInTerritoryMeshes(newTerritoriesGroup, config.territoryColors.opacity / 100, 500);
         // Optionally enable BVH for faster raycasting
         if (bvhEnabledRef.current) {
           const ok = await enableBVHForGroup(newTerritoriesGroup);
@@ -173,6 +288,7 @@ export function useNationalTerritories3D({ enabled, scene, config }: UseNational
         if (replace && territoriesGroupRef.current) {
           clearGroup(territoriesGroupRef.current);
           territoriesGroupRef.current.add(...newTerritoriesGroup.children);
+          applyGeoPoliticalSceneCounterOffset(territoriesGroupRef.current);
         } else {
           territoriesGroupRef.current = newTerritoriesGroup;
           if (!globalLayerRegistry.getStatus('geopolitical-territories')) {
@@ -204,11 +320,9 @@ export function useNationalTerritories3D({ enabled, scene, config }: UseNational
   useEffect(() => {
     if (!enabled || !scene) return;
     if (currentLODRef.current !== null) return; // already built
-    // Estimate initial distance via camera or default
-    let dist = 250;
-  const s = scene as unknown as { __camera?: THREE.Camera };
-  if (s && s.__camera) dist = s.__camera.position.length();
-    const initialLOD = config.lod?.mode === 'locked' ? config.lod.lockedLevel : pickLOD(dist, hysteresis, null);
+    const initialLOD = config.lod?.mode === 'locked'
+      ? config.lod.lockedLevel
+      : defaultLodForDeviceTier(deviceTierRef.current);
     buildForLOD(initialLOD);
   }, [enabled, scene, config.lod?.lockedLevel, config.lod?.mode, hysteresis, buildForLOD]);
 
@@ -225,7 +339,9 @@ export function useNationalTerritories3D({ enabled, scene, config }: UseNational
       if (t - lastCheck < checkIntervalMs) return;
       lastCheck = t;
       const dist = cameraRef.current.position.length();
-      const desired = pickLOD(dist, hysteresis, currentLODRef.current);
+      const desiredByDistance = pickLOD(dist, hysteresis, currentLODRef.current);
+      const tierCap = maxLodForDeviceTier(deviceTierRef.current);
+      const desired = Math.min(desiredByDistance, tierCap) as 0 | 1 | 2;
       if (desired !== currentLODRef.current) {
         buildForLOD(desired, true);
       }
@@ -344,9 +460,9 @@ export function useNationalTerritories3D({ enabled, scene, config }: UseNational
 
   // Development-only: expose an overlay probe to window for tests/diagnostics
   useEffect(() => {
-    if (process?.env?.NODE_ENV !== 'development') return;
+    if (!isDevRuntime()) return;
     // Attach a diagnostic helper to window
-  const w = window as unknown as { __geoOverlayProbe?: { getCenterLineDiagnostics: (rectSize?: number) => unknown } } & Record<string, unknown>;
+  const w = window as unknown as { __geoOverlayProbe?: { getCenterLineDiagnostics: (rectSize?: number) => unknown; getGroupTransforms?: () => unknown } } & Record<string, unknown>;
 
     try {
       // nothing here for id picking; handled in env-agnostic effect above
@@ -412,6 +528,23 @@ export function useNationalTerritories3D({ enabled, scene, config }: UseNational
   } catch (_e) {
           return null;
         }
+      },
+      getGroupTransforms: () => {
+        const summarize = (group: THREE.Group | null) => {
+          if (!group) return null;
+          return {
+            rotationY: group.rotation.y,
+            sceneCounterOffsetRad: group.userData?.sceneCounterOffsetRad ?? null,
+            source: group.userData?.source ?? null,
+            childCount: group.children.length
+          };
+        };
+        return {
+          borders: summarize(bordersGroupRef.current),
+          maritime: summarize(maritimeGroupRef.current),
+          territories: summarize(territoriesGroupRef.current),
+          currentLOD: currentLODRef.current
+        };
       }
     };
   return () => { if (w.__geoOverlayProbe) delete w.__geoOverlayProbe; };
@@ -494,7 +627,7 @@ export function useNationalTerritories3D({ enabled, scene, config }: UseNational
 
   // Dev-only HUD to display ID under cursor when geoIdPickingHud=1
   useEffect(() => {
-    if (process?.env?.NODE_ENV !== 'development') return;
+    if (!isDevRuntime()) return;
     if (!enabled) return;
     try {
       const params = new URLSearchParams(window.location.search);
@@ -528,6 +661,22 @@ export function useNationalTerritories3D({ enabled, scene, config }: UseNational
       const now = performance.now();
       const dt = Math.min(0.1, (now - lastFrameTimeRef.current) / 1000); // clamp dt
       lastFrameTimeRef.current = now;
+      const dtMs = dt * 1000;
+
+      if (config.lod?.mode === 'auto' && currentLODRef.current !== null) {
+        if (dtMs > 38) overBudgetFramesRef.current += 1;
+        else overBudgetFramesRef.current = Math.max(0, overBudgetFramesRef.current - 2);
+
+        const cooldownElapsed = now - lastDownshiftAtRef.current > 2000;
+        if (cooldownElapsed && overBudgetFramesRef.current >= 45 && currentLODRef.current > 0) {
+          const downshift = (currentLODRef.current - 1) as 0 | 1 | 2;
+          lastDownshiftAtRef.current = now;
+          overBudgetFramesRef.current = 0;
+          buildForLOD(downshift, true);
+          return;
+        }
+      }
+
       if (!raycasterRef.current || !pointerRef.current || !camera) return;
       if (now - lastPickTsRef.current < pickIntervalMs) return;
       lastPickTsRef.current = now;
@@ -642,7 +791,7 @@ export function useNationalTerritories3D({ enabled, scene, config }: UseNational
     };
     frame = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(frame);
-  }, [enabled, scene, config.highlightOnHover, config.borderVisibility, config.territoryColors.opacity, config.reducedMotion, ensureTerritoryUserData]);
+  }, [enabled, scene, config.highlightOnHover, config.borderVisibility, config.territoryColors.opacity, config.reducedMotion, config.lod?.mode, ensureTerritoryUserData, buildForLOD]);
 
   // Keep BVH enabled flag in sync with config; if enabling at runtime, try to enable on existing group
   useEffect(() => {

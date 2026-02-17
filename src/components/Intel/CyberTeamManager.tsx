@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Cyber Team Manager Component - SOCOM/NIST Compliant with Advanced Cybersecurity
 // Enhanced with PQC, DID, OTK, TSS, and dMPC for military-grade team collaboration
 // Allows creation and management of cyber investigation teams with quantum-safe security

@@ -7,8 +7,8 @@ import SupportEntryButton from './SupportEntryButton';
 import SupportFunnelModal from './SupportFunnelModal';
 import styles from './SupportFunnelModal.module.css';
 
-const HEADLINE = 'Intelligence Reborn. Join the Starcom Initiative. Become the Spark that Ignites the Earth Intelligence Network.';
-const SUBHEAD = 'Join the secure ops channel. Help build the Earth Intelligence Network. Strengthen our defenses against control.';
+const HEADLINE = 'Intelligence Reborn.\nJoin the Starcom Initiative.';
+const SUBHEAD = 'Become the Spark that Ignites the Earth Intelligence Network. Join the secure ops channel. Help build the Earth Intelligence Network. Strengthen our defenses against control.';
 const DISCLOSURE = 'Contributions to Starcom are personal support for an independent open-source project. They are not tax-deductible and are not processed as charitable donations. No goods, services, or benefits are provided in exchange. Subject to U.S. law; treated as voluntary personal gifts.';
 const DISCORD_URL = 'https://discord.gg/Mea5v8pQmt';
 const TELEGRAM_URL = 'https://t.me/starcomintelgroup';
@@ -44,6 +44,7 @@ const LEARN_BODY = (
 );
 
 const SupportFunnelRoot: React.FC = () => {
+  const supportOpsDisabled = true;
   const config = useMemo(() => getSupportFunnelConfig(), []);
   const { eligible, markImpression, markSnooze, markDismiss, markAction } = useSupportFunnelState(config);
   const { sessionId, variant } = useMemo(() => getExperimentContext(config), [config]);
@@ -188,7 +189,7 @@ const SupportFunnelRoot: React.FC = () => {
   };
 
   // If feature disabled, render nothing
-  if (!config.enabled) {
+  if (supportOpsDisabled || !config.enabled) {
     return null;
   }
 

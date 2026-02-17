@@ -5,6 +5,7 @@
 
 import { Vector3, QuadraticBezierCurve3 } from 'three';
 import { CyberAttackData, SeverityLevel } from '../../../../types/CyberAttacks';
+import { latLngToGlobeVector3 } from '../../../../utils/globeCoordinates';
 
 export interface AnimationFrame {
   position: Vector3;
@@ -164,14 +165,7 @@ export class AttackAnimationManager {
    * Convert lat/lng to 3D coordinates on globe
    */
   private coordinatesToVector3(lat: number, lng: number): Vector3 {
-    const phi = (90 - lat) * (Math.PI / 180);
-    const theta = (lng + 180) * (Math.PI / 180);
-
-    const x = -(this.globeRadius * Math.sin(phi) * Math.cos(theta));
-    const z = this.globeRadius * Math.sin(phi) * Math.sin(theta);
-    const y = this.globeRadius * Math.cos(phi);
-
-    return new Vector3(x, y, z);
+    return latLngToGlobeVector3(lat, lng, this.globeRadius);
   }
 
   /**

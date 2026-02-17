@@ -17,6 +17,8 @@ import type {
 import type {
   IntelReport3DContextState
 } from '../../types/intelligence/IntelContextTypes';
+import { FrameStats } from './perf/FrameStats';
+import { latLngToGlobeVector3 } from '../../utils/globeCoordinates';
 
 // =============================================================================
 // INTERFACES AND TYPES
@@ -112,6 +114,7 @@ export class IntelGlobeService extends EventEmitter {
     frameRate: 60,
     lastUpdate: new Date()
   };
+  private frameStats = new FrameStats();
   
   // Animation and rendering
   private animationFrame: number | null = null;
@@ -327,6 +330,17 @@ export class IntelGlobeService extends EventEmitter {
   private updatePerformanceSnapshot(renderStart?: number): void {
     const visibleCount = this.getVisibleMarkers().length;
     const frameRate = this.performanceMetrics.frameRate ?? this.performanceMetrics.fps ?? 0;
+
+    // Capture JS heap usage when available for lightweight memory tracking.
+    if (typeof performance !== 'undefined' && (performance as any).memory?.usedJSHeapSize) {
+      this.performanceMetrics.memoryUsage = (performance as any).memory.usedJSHeapSize;
+    }
+
+    this.frameStats.record({
+      fps: frameRate,
+      renderTimeMs: typeof renderStart === 'number' ? performance.now() - renderStart : undefined,
+      heapBytes: this.performanceMetrics.memoryUsage
+    });
 
     this.performanceMetrics.totalIntelReports = this.markers.size;
     this.performanceMetrics.markerCount = this.markers.size;
@@ -861,14 +875,7 @@ export class IntelGlobeService extends EventEmitter {
    * Convert lat/lng to 3D vector on sphere
    */
   private latLngToVector3(lat: number, lng: number, radius: number): THREE.Vector3 {
-    const phi = (90 - lat) * (Math.PI / 180);
-    const theta = (lng + 180) * (Math.PI / 180);
-    
-    const x = -(radius * Math.sin(phi) * Math.cos(theta));
-    const z = radius * Math.sin(phi) * Math.sin(theta);
-    const y = radius * Math.cos(phi);
-    
-    return new THREE.Vector3(x, y, z);
+    return latLngToGlobeVector3(lat, lng, radius);
   }
   
   /**
@@ -1004,9 +1011,9 @@ export class IntelGlobeService extends EventEmitter {
       });
       
       // Update performance metrics
-        const frameRate = 1 / delta;
-        this.performanceMetrics.frameRate = frameRate;
-        this.performanceMetrics.fps = frameRate;
+      const frameRate = 1 / delta;
+      this.performanceMetrics.frameRate = frameRate;
+      this.performanceMetrics.fps = frameRate;
       this.performanceMetrics.lastUpdate = new Date();
     };
     
@@ -1064,6 +1071,10 @@ export class IntelGlobeService extends EventEmitter {
    */
   getPerformanceMetrics(): IntelPerformanceMetrics {
     return { ...this.performanceMetrics };
+  }
+
+  getFrameStatsSnapshot() {
+    return this.frameStats.snapshot();
   }
   
   /**

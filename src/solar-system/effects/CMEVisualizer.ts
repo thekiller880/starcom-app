@@ -192,6 +192,17 @@ export class CMEVisualizer {
     
     const shockMesh = new THREE.Mesh(geometry, material);
     shockMesh.position.copy(this.sunMesh.position);
+
+    const shockMaterial = shockMesh.material as THREE.ShaderMaterial;
+    if (shockMaterial.uniforms?.uShockRadius) {
+      shockMaterial.uniforms.uShockRadius.value = 1.0;
+    }
+    if (shockMaterial.uniforms?.uIntensity) {
+      shockMaterial.uniforms.uIntensity.value = cme.intensity;
+    }
+    if (shockMaterial.uniforms?.uDirection) {
+      shockMaterial.uniforms.uDirection.value = cme.direction;
+    }
     
     // Store reference with CME ID
     (shockMesh as any).cmeId = cme.id;
@@ -246,6 +257,17 @@ export class CMEVisualizer {
     
     const coneMesh = new THREE.Mesh(geometry, material);
     coneMesh.position.copy(this.sunMesh.position);
+
+    const coneMaterial = coneMesh.material as THREE.ShaderMaterial;
+    if (coneMaterial.uniforms?.uCMESpeed) {
+      coneMaterial.uniforms.uCMESpeed.value = cme.speed;
+    }
+    if (coneMaterial.uniforms?.uCMEDensity) {
+      coneMaterial.uniforms.uCMEDensity.value = cme.intensity;
+    }
+    if (coneMaterial.uniforms?.uDirection) {
+      coneMaterial.uniforms.uDirection.value = cme.direction;
+    }
     
     // Orient cone in CME direction
     coneMesh.lookAt(
@@ -261,8 +283,8 @@ export class CMEVisualizer {
   }
 
   private calculateEarthImpact(cme: CMEEvent): EarthImpactPrediction | null {
-    // Earth is at (1, 0, 0) in our coordinate system (simplified)
-    const earthDirection = new THREE.Vector3(1, 0, 0);
+    // Earth-facing direction aligns with +Z in this solar coordinate system
+    const earthDirection = new THREE.Vector3(0, 0, 1);
     
     // Calculate angle between CME direction and Earth direction
     const angle = Math.acos(cme.direction.dot(earthDirection));
@@ -284,17 +306,17 @@ export class CMEVisualizer {
       return null; // Too far from Earth direction
     }
     
-    // Calculate arrival time based on CME speed
-    const travelTimeHours = this.config.earthDistance * 1e6 / cme.speed / 3600; // Convert to hours
+    // Calculate arrival time based on CME speed with propagation drag factor
+    const travelTimeHours = (this.config.earthDistance * 1e6 / cme.speed / 3600) * 1.15; // Convert to hours
     const estimatedArrivalTime = cme.launchTime + (travelTimeHours * 60 * 60 * 1000);
     
     // Determine impact intensity
     let impactIntensity: EarthImpactPrediction['impactIntensity'] = 'minor';
-    if (cme.intensity > 0.8) {
+    if (cme.intensity > 0.75) {
       impactIntensity = 'extreme';
-    } else if (cme.intensity > 0.6) {
+    } else if (cme.intensity > 0.45) {
       impactIntensity = 'severe';
-    } else if (cme.intensity > 0.4) {
+    } else if (cme.intensity > 0.25) {
       impactIntensity = 'moderate';
     }
     
@@ -357,7 +379,7 @@ export class CMEVisualizer {
         // Remove expired shock wave
         this.scene.remove(shockWave);
         shockWave.geometry.dispose();
-        shockWave.material.dispose();
+        this.disposeMaterial(shockWave.material);
         this.shockWaveEffects.splice(index, 1);
       } else {
         // Update shock wave expansion
@@ -382,7 +404,7 @@ export class CMEVisualizer {
       if ((wave as any).cmeId === cmeId) {
         this.scene.remove(wave);
         wave.geometry.dispose();
-        wave.material.dispose();
+        this.disposeMaterial(wave.material);
         return false;
       }
       return true;
@@ -392,7 +414,7 @@ export class CMEVisualizer {
       if ((cone as any).cmeId === cmeId) {
         this.scene.remove(cone);
         cone.geometry.dispose();
-        cone.material.dispose();
+        this.disposeMaterial(cone.material);
         return false;
       }
       return true;
@@ -430,14 +452,14 @@ export class CMEVisualizer {
     // Dispose all shock wave effects
     this.shockWaveEffects.forEach(wave => {
       wave.geometry.dispose();
-      wave.material.dispose();
+      this.disposeMaterial(wave.material);
       this.scene.remove(wave);
     });
     
     // Dispose all CME cone effects
     this.cmeConeMeshes.forEach(cone => {
       cone.geometry.dispose();
-      cone.material.dispose();
+      this.disposeMaterial(cone.material);
       this.scene.remove(cone);
     });
     
@@ -446,5 +468,14 @@ export class CMEVisualizer {
     this.shockWaveEffects.length = 0;
     this.cmeConeMeshes.length = 0;
     this.earthImpactPredictions.length = 0;
+  }
+
+  private disposeMaterial(material: THREE.Material | THREE.Material[] | undefined): void {
+    if (!material) return;
+    if (Array.isArray(material)) {
+      material.forEach(mat => mat.dispose());
+    } else {
+      material.dispose();
+    }
   }
 }

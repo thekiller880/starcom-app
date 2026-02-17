@@ -9,7 +9,21 @@ vi.mock('three', () => ({
     remove: vi.fn()
   })),
   Mesh: vi.fn(() => ({
-    position: { copy: vi.fn(), set: vi.fn() },
+    position: {
+      x: 0,
+      y: 0,
+      z: 0,
+      copy: vi.fn(function(v: any) {
+        this.x = v?.x ?? 0;
+        this.y = v?.y ?? 0;
+        this.z = v?.z ?? 0;
+      }),
+      set: vi.fn(function(x: number, y: number, z: number) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+      })
+    },
     scale: { setScalar: vi.fn(), set: vi.fn() },
     lookAt: vi.fn(),
     material: {
@@ -39,18 +53,64 @@ vi.mock('three', () => ({
     },
     dispose: vi.fn()
   })),
-  Vector3: vi.fn(() => ({
-    x: 0, y: 0, z: 0,
-    set: vi.fn(),
-    copy: vi.fn(),
-    clone: vi.fn(function() { return { x: this.x, y: this.y, z: this.z, normalize: vi.fn().mockReturnThis(), multiplyScalar: vi.fn().mockReturnThis(), clone: vi.fn(), dot: vi.fn(() => 0.5) }; }),
-    normalize: vi.fn().mockReturnThis(),
-    multiplyScalar: vi.fn().mockReturnThis(),
-    add: vi.fn(),
-    distanceTo: vi.fn(() => 100),
-    length: vi.fn(() => 1),
-    dot: vi.fn(() => 0.5)
-  })),
+  Vector3: vi.fn((x = 0, y = 0, z = 0) => {
+    const vector: any = {
+      x,
+      y,
+      z,
+      set: vi.fn(function(nx: number, ny: number, nz: number) {
+        this.x = nx;
+        this.y = ny;
+        this.z = nz;
+        return this;
+      }),
+      copy: vi.fn(function(v: any) {
+        this.x = v?.x ?? 0;
+        this.y = v?.y ?? 0;
+        this.z = v?.z ?? 0;
+        return this;
+      }),
+      clone: vi.fn(function() {
+        return (THREE.Vector3 as any)(this.x, this.y, this.z);
+      }),
+      normalize: vi.fn(function() {
+        const len = Math.sqrt(this.x * this.x + this.y * this.y + this.z * this.z) || 1;
+        this.x /= len;
+        this.y /= len;
+        this.z /= len;
+        return this;
+      }),
+      multiplyScalar: vi.fn(function(s: number) {
+        this.x *= s;
+        this.y *= s;
+        this.z *= s;
+        return this;
+      }),
+      add: vi.fn(function(v: any) {
+        this.x += v?.x ?? 0;
+        this.y += v?.y ?? 0;
+        this.z += v?.z ?? 0;
+        return this;
+      }),
+      distanceTo: vi.fn(function(v: any) {
+        const dx = this.x - (v?.x ?? 0);
+        const dy = this.y - (v?.y ?? 0);
+        const dz = this.z - (v?.z ?? 0);
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
+      }),
+      dot: vi.fn(function(v: any) {
+        return this.x * (v?.x ?? 0) + this.y * (v?.y ?? 0) + this.z * (v?.z ?? 0);
+      })
+    };
+
+    Object.defineProperty(vector, 'length', {
+      get() {
+        return Math.sqrt(this.x * this.x + this.y * this.y + this.z * this.z);
+      }
+    });
+
+    return vector;
+  }),
   Color: vi.fn(() => ({
     setHex: vi.fn(),
     r: 1, g: 1, b: 1

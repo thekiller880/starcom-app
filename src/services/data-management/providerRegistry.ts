@@ -18,6 +18,8 @@ import { EIADataCacheService } from '../eia/EIADataCacheService';
 import { SpaceWeatherCacheService } from '../SpaceWeatherCacheService';
 import { SharedCacheDataService } from '../../cache/sharedCacheService';
 
+let configuredManagerPromise: Promise<StarcomDataManager> | null = null;
+
 // Shared cache configurations for provider caches (bounded + TTL)
 const CACHE_DEFAULTS = {
   weather: { ttlMs: 10 * 60 * 1000, maxEntries: 500, maxSize: 2 * 1024 * 1024 },
@@ -259,9 +261,15 @@ export async function setupDataProviders(manager: StarcomDataManager): Promise<v
  * Get a pre-configured StarcomDataManager instance with all providers
  */
 export async function createConfiguredDataManager(): Promise<StarcomDataManager> {
-  const manager = new StarcomDataManager();
-  await setupDataProviders(manager);
-  return manager;
+  if (!configuredManagerPromise) {
+    configuredManagerPromise = (async () => {
+      const manager = new StarcomDataManager();
+      await setupDataProviders(manager);
+      return manager;
+    })();
+  }
+
+  return configuredManagerPromise;
 }
 
 /**

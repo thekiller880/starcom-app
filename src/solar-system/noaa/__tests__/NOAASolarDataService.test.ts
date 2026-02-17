@@ -120,10 +120,15 @@ describe('NOAASolarDataService - TDD Specifications', () => {
 
     it('should implement data validation and error handling', async () => {
       // Test invalid data handling - disable fallback mode for this test
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ invalid: 'data' })
-      });
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ data: [] }) // connect call
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ invalid: 'data' }) // getXrayFlux call
+        });
 
       service = new NOAASolarDataService({ fallbackMode: false });
       await service.connect();
@@ -194,10 +199,15 @@ describe('NOAASolarDataService - TDD Specifications', () => {
         }]
       };
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => rawData
-      });
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => rawData
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => rawData
+        });
 
       service = new NOAASolarDataService();
       await service.connect();
@@ -286,10 +296,15 @@ describe('NOAASolarDataService - TDD Specifications', () => {
         }]
       };
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockData
-      });
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockData
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockData
+        });
 
       await service.connect();
       const firstFetch = await service.getXrayFlux();
@@ -351,7 +366,7 @@ describe('NOAASolarDataService - TDD Specifications', () => {
     });
 
     it('should test data reliability and performance', async () => {
-      service = new NOAASolarDataService({ fallbackMode: false });
+      service = new NOAASolarDataService({ fallbackMode: false, enableCaching: false });
 
       // Mock multiple rapid requests
       const promises: Promise<any>[] = [];
@@ -433,17 +448,26 @@ describe('NOAASolarDataService - TDD Specifications', () => {
         });
       });
 
-      // Mock data that should trigger notification
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          data: [{
-            timestamp: new Date().toISOString(),
-            flux_short: 5.0e-5, // X-class flare
-            flux_long: 2.0e-5,
-            classification: 'X5.0'
-          }]
-        })
+      // Mock endpoint-specific NOAA responses
+      mockFetch.mockImplementation(async (url: string) => {
+        if (url.includes('xray-flares-latest')) {
+          return {
+            ok: true,
+            json: async () => ({ events: [] })
+          } as Response;
+        }
+
+        return {
+          ok: true,
+          json: async () => ({
+            data: [{
+              timestamp: new Date().toISOString(),
+              flux_short: 5.0e-5, // X-class flare
+              flux_long: 2.0e-5,
+              classification: 'X5.0'
+            }]
+          })
+        } as Response;
       });
 
       await service.connect();

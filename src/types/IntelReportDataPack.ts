@@ -279,6 +279,7 @@ export interface IntelEntity {
   confidence: number;
   sources: string[];
   verified: boolean;
+  classification?: string;
   
   // Graph visualization
   position?: { x: number; y: number };

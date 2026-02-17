@@ -12,11 +12,12 @@
 
 import { Intel, IntelRequirement } from '../../models/Intel/Intel';
 import { IntelReportData } from '../../models/IntelReportData';
-import { IntelligenceWorkflowEngine, WorkflowExecution, AnalysisWorkflow } from './IntelligenceWorkflowEngine';
-import { IntelligenceAnalysisEngine, AnalysisResult, AnalysisContext } from './IntelligenceAnalysisEngine';
+import { IntelligenceWorkflowEngine, WorkflowExecution, AnalysisWorkflow, AnalysisContext } from './IntelligenceWorkflowEngine';
+import { IntelligenceAnalysisEngine, AnalysisResult } from './IntelligenceAnalysisEngine';
 import { IntelValidator } from '../../models/Intel/Validators';
 import { IntelFusionService } from '../../models/Intel/IntelFusion';
 import { enhancedEventEmitter } from '../../core/intel/events/enhancedEventEmitter';
+import { normalizeAnalysisContext } from './analysisContext';
 
 // =============================================================================
 // DASHBOARD TYPES AND INTERFACES
@@ -100,6 +101,7 @@ export interface IntelligenceOperation {
   status: 'PLANNING' | 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'CANCELLED';
   start_time: number;
   end_time?: number;
+  lead_analyst?: string;
   requirements: IntelRequirement[];
   collected_intel: string[]; // Intel IDs
   analysis_results: string[]; // Analysis IDs
@@ -208,7 +210,7 @@ export class IntelligenceDashboardService {
 
       // 4. Perform automatic analysis if enabled
       if (processOptions.auto_analyze && validatedIntel.length > 0) {
-        const analysisContext = processOptions.context || this.createDefaultAnalysisContext();
+        const analysisContext = normalizeAnalysisContext(processOptions.context || this.createDefaultAnalysisContext());
         const analysisResults = await this.analysisEngine.analyzeIntelligence(
           validatedIntel,
           analysisContext
@@ -318,7 +320,7 @@ export class IntelligenceDashboardService {
     analysisResults: AnalysisResult[],
     context: {
       title: string;
-      analyst: string;
+      analystId: string;
       classification: string;
       purpose: string;
       audience: string[];
@@ -328,7 +330,7 @@ export class IntelligenceDashboardService {
     try {
       // Use Intel Fusion Service to create comprehensive report
       const report = IntelFusionService.fuseIntelIntoReport(intel, {
-        analystId: context.analyst,
+        analystId: context.analystId,
         reportTitle: context.title,
         analysisMethod: 'automated-dashboard',
         keyQuestions: this.extractKeyQuestionsFromAnalysis(analysisResults),
@@ -349,7 +351,7 @@ export class IntelligenceDashboardService {
         intel_sources_count: intel.length,
         analysis_results_count: analysisResults.length,
         automated_processing: true
-      };
+      } as IntelReportData['metadata'];
 
       enhancedEventEmitter.emit('report:generated', {
         report_id: enhancedReport.id,
@@ -566,13 +568,19 @@ export class IntelligenceDashboardService {
   }
 
   private createDefaultAnalysisContext(): AnalysisContext {
+    const now = Date.now();
     return {
-      focus_areas: ['threat_detection', 'pattern_analysis'],
-      time_range: { start: Date.now() - 86400000, end: Date.now() }, // Last 24 hours
-      priority_sources: ['SIGINT', 'HUMINT', 'OSINT'],
-      analysis_objectives: ['identify_threats', 'find_patterns', 'assess_risks'],
+      analystId: 'dashboard-system',
+      reportTitle: 'Dashboard Automated Summary',
+      keyQuestions: [
+        'What intelligence has been collected?',
+        'What threats or anomalies are emerging?'
+      ],
+      timeframe: { start: now - 86400000, end: now },
+      focusAreas: ['threat_detection', 'pattern_analysis'],
+      analysisObjectives: ['identify_threats', 'find_patterns', 'assess_risks'],
       constraints: [],
-      background_context: 'Automated dashboard analysis'
+      backgroundContext: 'Automated dashboard analysis'
     };
   }
 
@@ -727,12 +735,17 @@ export class IntelligenceDashboardService {
   private createOperationContext(operation: IntelligenceOperation, _options: Record<string, unknown>): AnalysisContext {
     // Create analysis context for the operation
     return {
-      focus_areas: ['operation_support'],
-      time_range: { start: operation.start_time, end: operation.end_time || Date.now() + 86400000 },
-      priority_sources: ['HUMINT', 'SIGINT', 'OSINT'],
-      analysis_objectives: ['support_operation'],
-      constraints: [],
-      background_context: `Operation: ${operation.name}`
+      analystId: operation.lead_analyst || 'operation-system',
+      reportTitle: `Operation ${operation.name} Summary`,
+      keyQuestions: [
+        `What is the current status of ${operation.name}?`,
+        'What operational risks require action?'
+      ],
+      timeframe: { start: operation.start_time, end: operation.end_time || Date.now() + 86400000 },
+      operationalEnvironment: 'operation_support',
+      priority: 'MEDIUM',
+      purpose: `Operation: ${operation.name}`,
+      constraints: []
     };
   }
 

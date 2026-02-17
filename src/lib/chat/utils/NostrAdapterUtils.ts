@@ -42,7 +42,6 @@ export function eventToNostrMessage(event: Event, channelId: string): NostrMessa
     senderDID: `did:nostr:${event.pubkey}`,
     senderAgency: 'CYBER_COMMAND',
     content: event.content,
-    clearanceLevel: 'CONFIDENTIAL',
     messageType: 'text',
     timestamp: event.created_at * 1000, // Convert to milliseconds
     encrypted: false,
@@ -66,7 +65,6 @@ export function nostrMessageToChatMessage(nostrMsg: NostrMessage): ChatMessage {
     status: 'sent', // NostrService doesn't track message status in the same way
     metadata: {
       ...nostrMsg.metadata,
-      clearanceLevel: nostrMsg.clearanceLevel,
       senderAgency: nostrMsg.senderAgency,
       senderDID: nostrMsg.senderDID,
       encrypted: nostrMsg.encrypted,
@@ -86,7 +84,6 @@ export function nostrMessageToChatMessage(nostrMsg: NostrMessage): ChatMessage {
 export function chatMessageToNostrMessage(chatMsg: ChatMessage, additionalData?: {
   senderDID?: string;
   senderAgency?: string;
-  clearanceLevel?: string;
   teamId?: string;
 }): NostrMessage {
   return {
@@ -97,7 +94,6 @@ export function chatMessageToNostrMessage(chatMsg: ChatMessage, additionalData?:
     senderDID: additionalData?.senderDID || `did:ea:${chatMsg.senderId}`,
     senderAgency: 'CYBER_COMMAND', // Default value
     content: chatMsg.content,
-    clearanceLevel: 'CONFIDENTIAL', // Default value
     messageType: mapChatTypeToNostrMessageType(chatMsg.type),
     timestamp: chatMsg.timestamp,
     encrypted: chatMsg.metadata?.encrypted as boolean || false,
@@ -123,7 +119,6 @@ export function nostrChannelToChatChannel(nostrChannel: NostrTeamChannel): ChatC
     metadata: {
       teamId: nostrChannel.teamId,
       description: nostrChannel.description,
-      clearanceLevel: nostrChannel.clearanceLevel,
       isEncrypted: !!nostrChannel.encryptionKey,
       isPQCEnabled: !!nostrChannel.pqcKey,
       createdAt: nostrChannel.createdAt,

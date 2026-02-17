@@ -87,16 +87,6 @@ const IntelligenceMarketplace: React.FC = () => {
     }
   };
 
-  const getClassificationColor = (classification: string) => {
-    switch (classification) {
-      case 'TOP_SECRET': return '#ff3366';
-      case 'SECRET': return '#ff9900';
-      case 'CONFIDENTIAL': return '#ffcc00';
-      case 'UNCLASSIFIED': return '#00ff41';
-      default: return '#888';
-    }
-  };
-
   const getAssetsForView = () => {
     switch (activeView) {
       case 'my-assets': return marketplace.myAssets;
@@ -185,12 +175,6 @@ const IntelligenceMarketplace: React.FC = () => {
                 <div className={styles.assetHeader}>
                   <span className={styles.assetIcon}>{getAssetIcon(asset.category)}</span>
                   <span className={styles.assetType}>{asset.category}</span>
-                  <span 
-                    className={styles.classification}
-                    style={{ backgroundColor: getClassificationColor(asset.classification) }}
-                  >
-                    {asset.classification}
-                  </span>
                 </div>
 
                 <div className={styles.assetTitle}>{asset.name}</div>

@@ -22,11 +22,16 @@ const StarcomPreloader: React.FC = () => {
           <div className="starcom-logo-container">
             <div className="starcom-logo-glow"></div>
             <div className="starcom-logo-text">STARCOM</div>
-            <div className="starcom-logo-subtitle">Intelligence Exchange</div>
+            <div className="starcom-logo-subtitle">Earth Intelligence Network</div>
           </div>
           
           {/* Orbital loading animation with intelligence network */}
           <div className="orbital-loader">
+            <div className="loader-core">
+              <div className="loader-core-surface"></div>
+              <div className="loader-core-glint"></div>
+            </div>
+
             {/* Data stream particles for inter-satellite communication */}
             <div className="data-stream data-stream-1"></div>
             <div className="data-stream data-stream-2"></div>
@@ -34,13 +39,25 @@ const StarcomPreloader: React.FC = () => {
             <div className="data-stream data-stream-4"></div>
             
             <div className="orbit orbit-1">
-              <div className="satellite satellite-1"></div>
+              <div className="satellite satellite-1">
+                <div className="sub-orbit">
+                  <div className="sub-satellite"></div>
+                </div>
+              </div>
             </div>
             <div className="orbit orbit-2">
-              <div className="satellite satellite-2"></div>
+              <div className="satellite satellite-2">
+                <div className="sub-orbit">
+                  <div className="sub-satellite"></div>
+                </div>
+              </div>
             </div>
             <div className="orbit orbit-3">
-              <div className="satellite satellite-3"></div>
+              <div className="satellite satellite-3">
+                <div className="sub-orbit">
+                  <div className="sub-satellite"></div>
+                </div>
+              </div>
             </div>
           </div>
           

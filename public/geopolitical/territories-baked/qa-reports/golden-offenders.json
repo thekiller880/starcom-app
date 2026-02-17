@@ -1,0 +1,24 @@
+{
+  "generatedAt": "2026-02-14T19:28:48.382Z",
+  "status": "pass",
+  "details": [
+    {
+      "lod": 0,
+      "missing": [],
+      "failedQaCodes": [],
+      "severeRatioCodes": []
+    },
+    {
+      "lod": 1,
+      "missing": [],
+      "failedQaCodes": [],
+      "severeRatioCodes": []
+    },
+    {
+      "lod": 2,
+      "missing": [],
+      "failedQaCodes": [],
+      "severeRatioCodes": []
+    }
+  ]
+}

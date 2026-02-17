@@ -35,6 +35,7 @@ import {
   disposeObject,
   logVertexCount,
 } from './SpaceWeatherGeometry';
+import { IntelReportVisualizationService } from '../services/IntelReportVisualizationService';
 import type { IntelReportOverlayMarker } from '../interfaces/IntelReportOverlay';
 
 export type GlobeEvent = { type: string; payload?: unknown };
@@ -380,16 +381,14 @@ export class GlobeEngine {
       }
       if (overlay === 'intelMarkers') {
         // Fetch intel markers from centralized IntelReportVisualizationService
-        import('../services/IntelReportVisualizationService').then(({ IntelReportVisualizationService }) => {
-          const viz = new IntelReportVisualizationService();
-          viz.getIntelReportMarkers().then((markers) => {
-            this.overlayDataCache['intelMarkers'] = markers;
-            this.setOverlayData('intelMarkers', markers);
-          }).catch((error) => {
-            console.error('Failed to load intel report markers:', error);
-            this.overlayDataCache['intelMarkers'] = [];
-            this.setOverlayData('intelMarkers', []);
-          });
+        const viz = new IntelReportVisualizationService();
+        viz.getIntelReportMarkers().then((markers) => {
+          this.overlayDataCache['intelMarkers'] = markers;
+          this.setOverlayData('intelMarkers', markers);
+        }).catch((error) => {
+          console.error('Failed to load intel report markers:', error);
+          this.overlayDataCache['intelMarkers'] = [];
+          this.setOverlayData('intelMarkers', []);
         });
       }
       if (overlay === 'naturalEvents') {
@@ -535,19 +534,58 @@ export class GlobeEngine {
     overlay: string,
     payload: MagnetopausePayload | BowShockPayload | AuroraPayload
   ): string {
+    const deformationSignature = (deformation?: {
+      modelVersion?: string;
+      noseRe?: number;
+      flankRe?: number;
+      tailRe?: number;
+      alpha?: number;
+      aberrationDeg?: number;
+      dawnDuskSkew?: number;
+      northSouthSkew?: number;
+      confidence?: number;
+    }) => {
+      if (!deformation) return 'none';
+      return [
+        deformation.modelVersion || 'unknown',
+        (deformation.noseRe ?? 0).toFixed(3),
+        (deformation.flankRe ?? 0).toFixed(3),
+        (deformation.tailRe ?? 0).toFixed(3),
+        (deformation.alpha ?? 0).toFixed(4),
+        (deformation.aberrationDeg ?? 0).toFixed(3),
+        (deformation.dawnDuskSkew ?? 0).toFixed(4),
+        (deformation.northSouthSkew ?? 0).toFixed(4),
+        (deformation.confidence ?? 0).toFixed(3)
+      ].join(':');
+    };
+
     if (overlay === 'spaceWeatherMagnetopause') {
       const p = payload as MagnetopausePayload;
       const pressure = typeof (p.meta as Record<string, unknown> | undefined)?.pressureNPa === 'number'
         ? (p.meta as { pressureNPa: number }).pressureNPa
         : 0;
-      return ['mp', p.quality, p.standoffRe.toFixed(3), p.clamped ? '1' : '0', pressure.toFixed(3)].join('|');
+      return [
+        'mp',
+        p.quality,
+        p.standoffRe.toFixed(3),
+        p.clamped ? '1' : '0',
+        pressure.toFixed(3),
+        deformationSignature(p.deformation)
+      ].join('|');
     }
     if (overlay === 'spaceWeatherBowShock') {
       const p = payload as BowShockPayload;
       const pressure = typeof (p.meta as Record<string, unknown> | undefined)?.pressureNPa === 'number'
         ? (p.meta as { pressureNPa: number }).pressureNPa
         : 0;
-      return ['bs', p.quality, p.radiusRe.toFixed(3), p.clamped ? '1' : '0', pressure.toFixed(3)].join('|');
+      return [
+        'bs',
+        p.quality,
+        p.radiusRe.toFixed(3),
+        p.clamped ? '1' : '0',
+        pressure.toFixed(3),
+        deformationSignature(p.deformation)
+      ].join('|');
     }
     if (overlay === 'spaceWeatherAurora') {
       const p = payload as AuroraPayload;
@@ -682,7 +720,6 @@ export const intelMarkersOverlay = {
   // Utility method to refresh markers from centralized service
   async refreshMarkers(): Promise<IntelReportOverlayMarker[]> {
     try {
-      const { IntelReportVisualizationService } = await import('../services/IntelReportVisualizationService');
       const viz = new IntelReportVisualizationService();
       this.markers = await viz.getIntelReportMarkers();
       return this.markers;

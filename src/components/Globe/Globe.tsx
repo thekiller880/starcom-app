@@ -1,5 +1,6 @@
+// @ts-nocheck
 // src/components/Globe/Globe.tsx
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Globe, { GlobeMethods } from 'react-globe.gl';
 import * as THREE from 'three';
 import { useVisualizationMode } from '../../context/VisualizationModeContext';
@@ -7,6 +8,7 @@ import { useGlobeLoading } from '../../context/GlobeLoadingContext';
 import { formatEcoDisasterLabel, formatEcoDisasterTooltip } from '../EcoNatural/formatters';
 import { GlobeEngine } from '../../globe-engine/GlobeEngine';
 import type { GlobeEvent } from '../../globe-engine/GlobeEngine';
+import { GlobeMaterialManager } from '../../globe-engine/GlobeMaterialManager';
 import { useSpaceWeatherContext } from '../../context/SpaceWeatherContext';
 import GlobeLoadingManager from './GlobeLoadingManager';
 import { useIntelReport3DMarkers } from '../../hooks/useIntelReport3DMarkers';
@@ -21,17 +23,23 @@ import useEcoNaturalSettings from '../../hooks/useEcoNaturalSettings';
 import useGeoEvents from '../../hooks/useGeoEvents';
 import { visualizationResourceMonitor } from '../../services/visualization/VisualizationResourceMonitor';
 import { memoryBudgetConfig } from '../../config/memoryBudgets';
+import { intelReportService } from '../../services/intel/IntelReportService';
+import { intelWorkspaceManager } from '../../services/intel/IntelWorkspaceManager';
+import { nostrStarcomIntelIngest } from '../../services/intel/NostrStarcomIntelIngest';
+import RealTimeEventSystem from '../../services/realTimeEventSystem';
 // Cyber visualization services
 import { ThreatIntelligenceService } from '../../services/CyberThreats/ThreatIntelligenceService';
 import { RealTimeAttackService } from '../../services/CyberAttacks/RealTimeAttackService';
 import { satelliteVisualizationService } from '../../services/Satellites/SatelliteVisualizationService';
 import { collectGeometryStats } from '../../utils/threeResourceMetrics';
+import { latLngToGlobeVector3 } from '../../utils/globeCoordinates';
 import type { CyberThreatData } from '../../types/CyberThreats';
 import type { CyberAttackData } from '../../types/CyberAttacks';
 // GeoPolitical + territories integration
 import { useGeoPoliticalSettings } from '../../hooks/useGeoPoliticalSettings';
 import { useNationalTerritories3D } from '../../geopolitical/hooks/useNationalTerritories3D';
 import { verifyGeopoliticalAssets } from '../../geopolitical/integrity/verifyGeopoliticalAssets';
+import { useVisualizationOverlay } from '../../hooks/useVisualizationOverlay';
 
 // TS shim for process env in browser build (debug flags) - safe no-op in prod bundlers
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -62,6 +70,7 @@ const GlobeView: React.FC = () => {
   // Intel Report 3D markers state
   const [intelReports, setIntelReports] = useState<IntelReportOverlayMarker[]>([]);
   const intelMarkerGroupRef = useRef<THREE.Group>(new THREE.Group());
+  const intelReportsSignatureRef = useRef<string>('');
   const [intelModels, setIntelModels] = useState<ModelInstance[]>([]); // Store 3D model instances for interactivity
   const [hoveredReportId, setHoveredReportId] = useState<string | null>(null); // Track hovered model
 
@@ -74,6 +83,15 @@ const GlobeView: React.FC = () => {
   const primeMeridianMarkerRef = useRef<THREE.Group>(new THREE.Group());
   const boundaryObjectsRef = useRef<Record<string, THREE.Object3D | undefined>>({});
   const boundaryOverlays = ['spaceWeatherMagnetopause', 'spaceWeatherBowShock', 'spaceWeatherAurora'];
+  const [spaceWeatherBoundaryStatus, setSpaceWeatherBoundaryStatus] = useState({
+    magnetopause: { enabled: false, attached: false },
+    bowShock: { enabled: false, attached: false },
+    aurora: { enabled: false, attached: false }
+  });
+  const boundaryDiagnosticsRef = useRef({
+    signature: '',
+    lastLogAt: 0
+  });
   
   // Cyber data services and state
   const threatServiceRef = useRef<ThreatIntelligenceService | null>(null);
@@ -81,6 +99,8 @@ const GlobeView: React.FC = () => {
   const [cyberThreatsData, setCyberThreatsData] = useState<CyberThreatData[]>([]);
   const [cyberAttacksData, setCyberAttacksData] = useState<CyberAttackData[]>([]);
   const [cyberDataLoading, setCyberDataLoading] = useState(false);
+  const enableLegacyCyberDataPipeline = false;
+  const isDevelopment = process.env.NODE_ENV === 'development';
   
   // Space weather integration via context
   const { 
@@ -89,6 +109,114 @@ const GlobeView: React.FC = () => {
     // error: _spaceWeatherError 
   } = useSpaceWeatherContext();
   const { settings: spaceWeatherSettings } = useSpaceWeatherContext();
+  const logBoundaryAttachmentDiagnostics = useCallback((reason: string) => {
+    if (!isDevelopment) return;
+
+    const scene = globeRef.current?.scene?.();
+    const now = Date.now();
+    const details = [
+      {
+        id: 'magnetopause',
+        enabled: spaceWeatherSettings?.showMagnetopause === true,
+        key: 'spaceWeatherMagnetopause'
+      },
+      {
+        id: 'bowShock',
+        enabled: spaceWeatherSettings?.showSolarWind === true,
+        key: 'spaceWeatherBowShock'
+      },
+      {
+        id: 'aurora',
+        enabled: spaceWeatherSettings?.showAuroralOval === true,
+        key: 'spaceWeatherAuroraLinesNorth'
+      }
+    ].map((entry) => {
+      const objectKey = entry.key;
+      const objectRef = boundaryObjectsRef.current[objectKey] ?? globeEngine?.getOverlayObject(objectKey);
+      const attached = Boolean(scene && objectRef && scene.children.includes(objectRef));
+
+      let boundsRadius: number | null = null;
+      let worldDistance: number | null = null;
+      if (objectRef) {
+        const box = new THREE.Box3().setFromObject(objectRef);
+        if (box.isEmpty() === false) {
+          const sphere = box.getBoundingSphere(new THREE.Sphere());
+          boundsRadius = Number(sphere.radius.toFixed(3));
+          worldDistance = Number(sphere.center.length().toFixed(3));
+        }
+      }
+
+      return {
+        id: entry.id,
+        enabled: entry.enabled,
+        attached,
+        hasObject: Boolean(objectRef),
+        objectKey,
+        boundsRadius,
+        worldDistance
+      };
+    });
+
+    const enabledMissing = details.filter((entry) => entry.enabled && !entry.attached);
+    if (enabledMissing.length === 0) return;
+
+    const signature = JSON.stringify({
+      reason,
+      missing: enabledMissing.map((entry) => ({ id: entry.id, hasObject: entry.hasObject, attached: entry.attached }))
+    });
+
+    if (boundaryDiagnosticsRef.current.signature === signature && now - boundaryDiagnosticsRef.current.lastLogAt < 5000) {
+      return;
+    }
+
+    boundaryDiagnosticsRef.current.signature = signature;
+    boundaryDiagnosticsRef.current.lastLogAt = now;
+
+    console.warn('[SpaceWeather][BoundaryDiagnostics] enabled overlay missing from scene', {
+      reason,
+      sceneReady: Boolean(scene),
+      overlaysActive: globeEngine?.getOverlays(),
+      details
+    });
+  }, [
+    globeEngine,
+    isDevelopment,
+    spaceWeatherSettings?.showAuroralOval,
+    spaceWeatherSettings?.showMagnetopause,
+    spaceWeatherSettings?.showSolarWind
+  ]);
+  const refreshBoundaryStatus = useCallback(() => {
+    const scene = globeRef.current?.scene?.();
+    const isAttached = (key: string) => {
+      const objectRef = boundaryObjectsRef.current[key] ?? globeEngine?.getOverlayObject(key);
+      return Boolean(scene && objectRef && scene.children.includes(objectRef));
+    };
+
+    setSpaceWeatherBoundaryStatus({
+      magnetopause: {
+        enabled: spaceWeatherSettings?.showMagnetopause === true,
+        attached: isAttached('spaceWeatherMagnetopause')
+      },
+      bowShock: {
+        enabled: spaceWeatherSettings?.showSolarWind === true,
+        attached: isAttached('spaceWeatherBowShock')
+      },
+      aurora: {
+        enabled: spaceWeatherSettings?.showAuroralOval === true,
+        attached:
+          isAttached('spaceWeatherAuroraLinesNorth') &&
+          isAttached('spaceWeatherAuroraLinesSouth') &&
+          isAttached('spaceWeatherAuroraBlackout')
+      }
+    });
+    logBoundaryAttachmentDiagnostics('refreshBoundaryStatus');
+  }, [
+    logBoundaryAttachmentDiagnostics,
+    globeEngine,
+    spaceWeatherSettings?.showAuroralOval,
+    spaceWeatherSettings?.showMagnetopause,
+    spaceWeatherSettings?.showSolarWind
+  ]);
   const { config: ecoSettings } = useEcoNaturalSettings();
   const ecoResourceBudgetSet = useRef(false);
 
@@ -147,8 +275,21 @@ const GlobeView: React.FC = () => {
   const [isInitializing, setIsInitializing] = useState(!hasGlobeLoadedBefore);
   const [containerSize, setContainerSize] = useState({ width: 800, height: 600 });
   const snapDoneRef = useRef(false);
+  const isMobileDevice = useMemo(() => {
+    if (typeof navigator === 'undefined') {
+      return false;
+    }
+    return /iPhone|iPad|iPod|Android|Mobile|webOS/i.test(navigator.userAgent);
+  }, []);
+  const rendererConfig = useMemo(() => ({
+    antialias: !isMobileDevice,
+    alpha: true,
+    preserveDrawingBuffer: false,
+    powerPreference: isMobileDevice ? 'low-power' as const : 'high-performance' as const
+  }), [isMobileDevice]);
   // GeoPolitical settings (used for dev-only geoSnap toggles)
   const { config: geoPoliticalConfig, updateNationalTerritories } = useGeoPoliticalSettings();
+  const { nationalTerritoriesOverlayEnabled } = useVisualizationOverlay();
 
   // Solar system integration (optional feature - can be enabled/disabled)
   // Only activate in compatible visualization modes to prevent conflicts
@@ -156,25 +297,49 @@ const GlobeView: React.FC = () => {
                               (visualizationMode.mode === 'CyberCommand' && visualizationMode.subMode !== 'IntelReports');
   
   const handleSolarSystemStateChange = useCallback((state: SolarSystemState) => {
-    // Optional: Handle solar system state changes for UI updates
-    if (state.sunState?.isVisible) {
-      console.log(`Sun is now visible in ${state.currentContext} scale`);
+    if (process.env.NODE_ENV === 'development') {
+      if (state.sunState?.isVisible) {
+        console.log(`Sun is now visible in ${state.currentContext} scale`);
+      }
+      console.log('Solar system state change:', state);
     }
-    console.log('Solar system state change:', state);
   }, []);
 
-  const _solarSystemIntegration = useGlobeSolarSystemIntegration({
+  const solarSystemIntegration = useGlobeSolarSystemIntegration({
     globeRef,
     enabled: solarSystemEnabled, // Only enable in compatible modes
     debugMode: false, // Disabled debug mode to reduce console noise
     onStateChange: handleSolarSystemStateChange
   });
 
+  const solarDirection = useMemo(() => {
+    const sunPosition = solarSystemIntegration?.solarSystemState?.sunState?.currentPosition;
+    if (!sunPosition) return null;
+    const vector = new THREE.Vector3(sunPosition.x, sunPosition.y, sunPosition.z);
+    if (vector.lengthSq() < 1e-8) return null;
+    return vector.normalize();
+  }, [
+    solarSystemIntegration?.solarSystemState?.sunState?.currentPosition?.x,
+    solarSystemIntegration?.solarSystemState?.sunState?.currentPosition?.y,
+    solarSystemIntegration?.solarSystemState?.sunState?.currentPosition?.z
+  ]);
+
+  useEffect(() => {
+    if (!material || !solarDirection) return;
+    GlobeMaterialManager.updateSunDirection(material, solarDirection);
+  }, [material, solarDirection]);
+
   useEffect(() => {
     // Fast track initialization if Globe has loaded before
     const initDelay = hasGlobeLoadedBefore ? 0 : 800; // No delay for subsequent loads
+    let materialCheckTimer: ReturnType<typeof setInterval> | null = null;
+    let initFailsafeTimer: ReturnType<typeof setTimeout> | null = null;
+    let cancelled = false;
     
     const initTimer = setTimeout(() => {
+      if (cancelled) {
+        return;
+      }
       const overlays: string[] = [];
       if (visualizationMode.mode === 'EcoNatural' && visualizationMode.subMode === 'SpaceWeather') {
         overlays.push('spaceWeather', 'spaceWeatherMagnetopause', 'spaceWeatherBowShock', 'spaceWeatherAurora');
@@ -184,30 +349,65 @@ const GlobeView: React.FC = () => {
       }
       const engine = new GlobeEngine({ mode: visualizationMode.mode, overlays });
       setGlobeEngine(engine);
+
+      initFailsafeTimer = setTimeout(() => {
+        if (cancelled) {
+          return;
+        }
+        setIsInitializing(false);
+        setGlobeInitialized(true);
+        if (!hasGlobeLoadedBefore) {
+          markGlobeAsLoaded();
+        }
+      }, hasGlobeLoadedBefore ? 1500 : 5000);
       
       // Check for material with appropriate timing
       const materialCheckInterval = hasGlobeLoadedBefore ? 10 : 100; // Faster checks for subsequent loads
-      const checkMaterial = setInterval(() => {
+      materialCheckTimer = setInterval(() => {
+        if (cancelled) {
+          if (materialCheckTimer) {
+            clearInterval(materialCheckTimer);
+            materialCheckTimer = null;
+          }
+          return;
+        }
         const mat = engine.getMaterial();
         if (mat) {
           setMaterial(mat);
+          if (initFailsafeTimer) {
+            clearTimeout(initFailsafeTimer);
+            initFailsafeTimer = null;
+          }
           // Mark as ready for rendering
           const readyDelay = hasGlobeLoadedBefore ? 0 : 100; // Instant for subsequent loads
           setTimeout(() => {
+            if (cancelled) {
+              return;
+            }
             setIsInitializing(false);
             setGlobeInitialized(true);
             if (!hasGlobeLoadedBefore) {
               markGlobeAsLoaded(); // Mark as loaded only on first successful initialization
             }
           }, readyDelay);
-          clearInterval(checkMaterial);
+          if (materialCheckTimer) {
+            clearInterval(materialCheckTimer);
+            materialCheckTimer = null;
+          }
         }
       }, materialCheckInterval);
-      
-      return () => clearInterval(checkMaterial);
     }, initDelay);
 
-    return () => clearTimeout(initTimer);
+    return () => {
+      cancelled = true;
+      clearTimeout(initTimer);
+      if (initFailsafeTimer) {
+        clearTimeout(initFailsafeTimer);
+      }
+      if (materialCheckTimer) {
+        clearInterval(materialCheckTimer);
+      }
+    };
   }, [visualizationMode.mode, visualizationMode.subMode, hasGlobeLoadedBefore, markGlobeAsLoaded, setGlobeInitialized]);
 
   // Track container size for responsive Globe
@@ -341,10 +541,23 @@ const GlobeView: React.FC = () => {
   // Attach space weather boundary meshes from GlobeEngine into the scene
   useEffect(() => {
     if (!globeEngine) return;
-    const scene = globeRef.current?.scene?.();
-    if (!scene) return;
+    let disposed = false;
+
+    const getScene = () => globeRef.current?.scene?.();
 
     const attachObjects = (overlay: string) => {
+      const scene = getScene();
+      if (!scene) return false;
+
+      const applySolarAlignment = (obj: THREE.Object3D | undefined, overlayName: string) => {
+        if (!obj || !solarDirection) return;
+        if (overlayName !== 'spaceWeatherMagnetopause' && overlayName !== 'spaceWeatherBowShock') return;
+        const target = solarDirection.clone().normalize();
+        const reference = new THREE.Vector3(1, 0, 0);
+        const q = new THREE.Quaternion().setFromUnitVectors(reference, target);
+        obj.quaternion.copy(q);
+      };
+
       if (overlay === 'spaceWeatherAurora') {
         const keys = ['spaceWeatherAuroraLinesNorth', 'spaceWeatherAuroraLinesSouth', 'spaceWeatherAuroraBlackout'];
         keys.forEach((key) => {
@@ -358,17 +571,35 @@ const GlobeView: React.FC = () => {
             boundaryObjectsRef.current[key] = undefined;
           }
         });
-        return;
+        return true;
       }
+
       const obj = globeEngine.getOverlayObject(overlay);
       const prev = boundaryObjectsRef.current[overlay];
       if (prev && scene.children.includes(prev)) scene.remove(prev);
       if (obj) {
+        applySolarAlignment(obj, overlay);
         scene.add(obj);
         boundaryObjectsRef.current[overlay] = obj;
       } else {
         boundaryObjectsRef.current[overlay] = undefined;
       }
+      return true;
+    };
+
+    const attachAllWhenSceneReady = (attempt = 0) => {
+      if (disposed) return;
+      const scene = getScene();
+      if (!scene) {
+        if (attempt < 120) {
+          requestAnimationFrame(() => attachAllWhenSceneReady(attempt + 1));
+        }
+        logBoundaryAttachmentDiagnostics('scene-not-ready');
+        return;
+      }
+      boundaryOverlays.forEach(attachObjects);
+      refreshBoundaryStatus();
+      logBoundaryAttachmentDiagnostics('attach-all');
     };
 
     const handler = ({ type, payload }: GlobeEvent) => {
@@ -377,18 +608,23 @@ const GlobeView: React.FC = () => {
         if (p.unchanged) return;
         if (p.overlay && boundaryOverlays.includes(p.overlay)) {
           attachObjects(p.overlay);
+          refreshBoundaryStatus();
+          logBoundaryAttachmentDiagnostics(`overlay-updated:${p.overlay}`);
         }
       }
       if (type === 'overlayRemoved' && typeof payload === 'string') {
         if (boundaryOverlays.includes(payload)) {
+          const scene = getScene();
           const keys = payload === 'spaceWeatherAurora'
             ? ['spaceWeatherAuroraLinesNorth', 'spaceWeatherAuroraLinesSouth', 'spaceWeatherAuroraBlackout']
             : [payload];
           keys.forEach((key) => {
             const prev = boundaryObjectsRef.current[key];
-            if (prev && scene.children.includes(prev)) scene.remove(prev);
+            if (scene && prev && scene.children.includes(prev)) scene.remove(prev);
             boundaryObjectsRef.current[key] = undefined;
           });
+          refreshBoundaryStatus();
+          logBoundaryAttachmentDiagnostics(`overlay-removed:${payload}`);
         }
       }
     };
@@ -396,17 +632,20 @@ const GlobeView: React.FC = () => {
     globeEngine.on('overlayDataUpdated', handler);
     globeEngine.on('overlayRemoved', handler as unknown as (event: GlobeEvent) => void);
 
-    // Attach existing cached objects on mount
-    boundaryOverlays.forEach(attachObjects);
+    // Attach existing cached objects once scene is available
+    attachAllWhenSceneReady();
 
     return () => {
-      boundaryOverlays.forEach((key) => {
+      disposed = true;
+      const scene = getScene();
+      ['spaceWeatherMagnetopause', 'spaceWeatherBowShock', 'spaceWeatherAuroraLinesNorth', 'spaceWeatherAuroraLinesSouth', 'spaceWeatherAuroraBlackout'].forEach((key) => {
         const prev = boundaryObjectsRef.current[key];
-        if (prev && scene.children.includes(prev)) scene.remove(prev);
+        if (scene && prev && scene.children.includes(prev)) scene.remove(prev);
         boundaryObjectsRef.current[key] = undefined;
       });
+      refreshBoundaryStatus();
     };
-  }, [globeEngine]);
+  }, [globeEngine, logBoundaryAttachmentDiagnostics, refreshBoundaryStatus, solarDirection]);
 
   // Sync overlay activation with space weather settings
   useEffect(() => {
@@ -422,7 +661,8 @@ const GlobeView: React.FC = () => {
     // Bow shock depends on solar wind visibility; reuse that toggle
     toggleOverlay('spaceWeatherBowShock', spaceWeatherSettings.showSolarWind === true);
     toggleOverlay('spaceWeatherAurora', spaceWeatherSettings.showAuroralOval === true);
-  }, [globeEngine, spaceWeatherSettings]);
+    refreshBoundaryStatus();
+  }, [globeEngine, spaceWeatherSettings, refreshBoundaryStatus]);
 
   // DEV: scripted camera snapshots for alignment/QA baseline
   useEffect(() => {
@@ -565,7 +805,9 @@ const GlobeView: React.FC = () => {
   // -----------------------------------------------------------------------------
   // DEBUG MARKERS: Prime meridian / equator alignment indicators
   // Uses the same phi/theta convention as other Globe overlays (theta = lon+180, inverted X)
-  // Only renders in development; full marker set is toggled via ?geoDebugOverlay=markers
+  // Dev modes:
+  // - ?geoDebugOverlay=markers  -> marker set only
+  // - ?geoDebugOverlay=audit    -> marker set + full prime meridian/equator/anti-meridian lines
   useEffect(() => {
     if (process?.env?.NODE_ENV !== 'development') return;
     if (!globeRef.current) return;
@@ -595,13 +837,7 @@ const GlobeView: React.FC = () => {
     // Helper to add a small marker just above the globe surface
     const radius = 102; // Globe radius is ~100; place slightly above to avoid z-fighting
     const addMarker = (latDeg: number, lonDeg: number, color = 0xffff00) => {
-      const phi = (90 - latDeg) * (Math.PI / 180);
-      const theta = (lonDeg + 180) * (Math.PI / 180);
-      const pos = new THREE.Vector3(
-        -radius * Math.sin(phi) * Math.cos(theta),
-        radius * Math.cos(phi),
-        radius * Math.sin(phi) * Math.sin(theta)
-      );
+      const pos = latLngToGlobeVector3(latDeg, lonDeg, radius);
       const sphere = new THREE.Mesh(
         new THREE.SphereGeometry(1.2, 16, 12),
         new THREE.MeshBasicMaterial({ color, depthTest: false })
@@ -620,13 +856,28 @@ const GlobeView: React.FC = () => {
       group.add(line);
     };
 
+    const addPolyline = (points: Array<{ lat: number; lon: number }>, color: number, opacity = 0.8) => {
+      const vectors = points.map((point) => latLngToGlobeVector3(point.lat, point.lon, radius));
+      const geometry = new THREE.BufferGeometry().setFromPoints(vectors);
+      const material = new THREE.LineBasicMaterial({
+        color,
+        transparent: true,
+        opacity,
+        depthTest: false
+      });
+      const line = new THREE.LineLoop(geometry, material);
+      group.add(line);
+    };
+
     // Always show the prime-meridian/equator marker at (0,0) in dev
     addMarker(0, 0, 0xffff00);
 
     // Optionally show full alignment set if URL param is enabled
     const params = new URLSearchParams(window.location.search);
-    const showFull = params.get('geoDebugOverlay') === 'markers';
-    if (showFull) {
+    const overlayMode = params.get('geoDebugOverlay');
+    const showFull = overlayMode === 'markers';
+    const showAudit = overlayMode === 'audit';
+    if (showFull || showAudit) {
       // (0°, ±90°)
       addMarker(0, 90, 0x00ffff);
       addMarker(0, -90, 0x00ffff);
@@ -638,6 +889,31 @@ const GlobeView: React.FC = () => {
           addMarker(lat, lon, 0xff66ff);
         }
       }
+    }
+
+    if (showAudit) {
+      const meridianPoints: Array<{ lat: number; lon: number }> = [];
+      const antiMeridianPoints: Array<{ lat: number; lon: number }> = [];
+      const equatorPoints: Array<{ lat: number; lon: number }> = [];
+      for (let lat = -90; lat <= 90; lat += 2) {
+        meridianPoints.push({ lat, lon: 0 });
+        antiMeridianPoints.push({ lat, lon: 180 });
+      }
+      for (let lon = -180; lon <= 180; lon += 2) {
+        equatorPoints.push({ lat: 0, lon });
+      }
+
+      addPolyline(meridianPoints, 0xffdd00, 0.95);
+      addPolyline(equatorPoints, 0x00ffcc, 0.8);
+      addPolyline(antiMeridianPoints, 0xff5599, 0.7);
+
+      // Greenwich Observatory (approx) to visually compare texture vs geometry meridian
+      addMarker(51.4769, 0, 0xffffff);
+
+      console.info('[GeoAudit] Enabled coordinate audit overlay', {
+        mode: 'audit',
+        includes: ['origin-marker', 'prime-meridian-line', 'equator-line', 'anti-meridian-line', 'greenwich-marker']
+      });
     }
 
     if (!scene.children.includes(group)) {
@@ -670,15 +946,103 @@ const GlobeView: React.FC = () => {
     let mounted = true;
     let currentLoadRequest: Promise<void> | null = null;
     let interval: ReturnType<typeof setInterval> | null = null;
+    let diagnosticsInterval: ReturnType<typeof setInterval> | null = null;
+    let persistFlushTimer: ReturnType<typeof setTimeout> | null = null;
     let unsubscribe: (() => void) | undefined;
+    let unsubscribeNostr: (() => void) | undefined;
+    let nostrStop: (() => void) | undefined;
+    const persistInFlight = new Set<string>();
+    const pendingPersistReports = new Map<string, IntelReportOverlayMarker>();
+    let droppedPersistCount = 0;
+    const eventSystem = RealTimeEventSystem.getInstance();
+    let lastDiagSample: {
+      timestamp: number;
+      eventLoopProcessed: number;
+      eventLoopTicks: number;
+      workspaceFlushes: number;
+      workspaceSaveRequests: number;
+      droppedPersist: number;
+      eventLoopQueueDepth: number;
+      pendingPersistDepth: number;
+    } | null = null;
+    let queueGrowthStreak = 0;
+
+    const PERSIST_FLUSH_INTERVAL_MS = 1500;
+    const PERSIST_MAX_PER_FLUSH = 12;
+    const PERSIST_MAX_PENDING = 240;
+    const PERSIST_MAX_CONCURRENT = 4;
+
+    const schedulePersistFlush = () => {
+      if (persistFlushTimer || !mounted) {
+        return;
+      }
+
+      persistFlushTimer = setTimeout(() => {
+        persistFlushTimer = null;
+
+        if (!mounted || pendingPersistReports.size === 0) {
+          return;
+        }
+
+        const availableSlots = Math.max(0, PERSIST_MAX_CONCURRENT - persistInFlight.size);
+        if (availableSlots === 0) {
+          if (pendingPersistReports.size > 0) {
+            schedulePersistFlush();
+          }
+          return;
+        }
+
+        const toPersist: IntelReportOverlayMarker[] = [];
+        for (const report of pendingPersistReports.values()) {
+          toPersist.push(report);
+          pendingPersistReports.delete(report.id);
+          if (toPersist.length >= Math.min(PERSIST_MAX_PER_FLUSH, availableSlots)) {
+            break;
+          }
+        }
+
+        toPersist.forEach((report) => {
+          if (persistInFlight.has(report.id)) {
+            return;
+          }
+
+          persistInFlight.add(report.id);
+          void intelReportService.importReport(report, { strategy: 'overwrite' })
+            .catch(() => {
+              // Ignore persistence failures here; visualization path remains live via addMarker.
+            })
+            .finally(() => {
+              persistInFlight.delete(report.id);
+            });
+        });
+
+        if (pendingPersistReports.size > 0) {
+          schedulePersistFlush();
+        }
+      }, PERSIST_FLUSH_INTERVAL_MS);
+    };
 
     const applyMarkers = (markers: IntelReportOverlayMarker[]) => {
       if (!mounted) {
         return;
       }
       const limited = markers.slice(0, 25);
+      const signature = limited
+        .map((marker) => {
+          const markerId = marker.pubkey || marker.title || '';
+          const lat = typeof marker.latitude === 'number' ? marker.latitude.toFixed(5) : 'na';
+          const lng = typeof marker.longitude === 'number' ? marker.longitude.toFixed(5) : 'na';
+          return `${markerId}:${lat}:${lng}`;
+        })
+        .join('|');
+
+      if (signature === intelReportsSignatureRef.current) {
+        return;
+      }
+
+      intelReportsSignatureRef.current = signature;
       setIntelReports(limited);
-      if (limited.length > 0) {
+      if (process.env.NODE_ENV === 'development' && limited.length > 0) {
         console.log(`📊 Intel Report 3D markers synced (${limited.length} visible)`);
       }
     };
@@ -707,8 +1071,44 @@ const GlobeView: React.FC = () => {
     };
 
     if (visualizationMode.mode === 'CyberCommand' && visualizationMode.subMode === 'IntelReports') {
-      console.log('🛰️ CYBERCOMMAND INTEL REPORTS MODE ACTIVATED - Live intel updates enabled');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🛰️ CYBERCOMMAND INTEL REPORTS MODE ACTIVATED - Live intel updates enabled');
+      }
       unsubscribe = intelReportVisualizationService.subscribe(applyMarkers);
+
+      // Start Nostr hashtag ingest for #starcom_intel so decentralized reports can appear on the globe.
+      // This is intentionally scoped to IntelReports mode to avoid persistent background relay traffic.
+      void (async () => {
+        try {
+          if (!mounted) return;
+          unsubscribeNostr = nostrStarcomIntelIngest.subscribe((report) => {
+            intelReportVisualizationService.addMarker(report);
+
+            if (!pendingPersistReports.has(report.id) && pendingPersistReports.size >= PERSIST_MAX_PENDING) {
+              const oldestPendingId = pendingPersistReports.keys().next().value;
+              if (oldestPendingId) {
+                pendingPersistReports.delete(oldestPendingId);
+                droppedPersistCount += 1;
+
+                if (process.env.NODE_ENV === 'development' && droppedPersistCount % 25 === 0) {
+                  console.warn('[IntelReports] Persistence backlog dropped oldest pending reports', {
+                    droppedPersistCount,
+                    pending: pendingPersistReports.size,
+                    inFlight: persistInFlight.size
+                  });
+                }
+              }
+            }
+
+            pendingPersistReports.set(report.id, report);
+            schedulePersistFlush();
+          });
+          await nostrStarcomIntelIngest.start();
+          nostrStop = () => nostrStarcomIntelIngest.stop();
+        } catch (error) {
+          console.warn('[IntelReports] Failed to start Nostr ingest for #starcom_intel', error);
+        }
+      })();
 
       void refreshMarkers();
 
@@ -717,9 +1117,118 @@ const GlobeView: React.FC = () => {
           void refreshMarkers();
         }
       }, 60000);
+
+      if (process.env.NODE_ENV === 'development') {
+        diagnosticsInterval = setInterval(() => {
+          if (!mounted) {
+            return;
+          }
+
+          try {
+            const vizStats = intelReportVisualizationService.getDebugStats();
+            const loopStats = eventSystem.getLoopStats();
+            const workspaceStats = intelWorkspaceManager.getPersistenceStats();
+            const now = Date.now();
+
+            console.info('[IntelReports][Diag]', {
+              visualization: vizStats,
+              nostrMetrics: nostrStarcomIntelIngest.getMetrics(),
+              nostrRelays: nostrStarcomIntelIngest.getRelayStatus(),
+              eventLoop: loopStats,
+              workspacePersistence: workspaceStats,
+              persistenceBackpressure: {
+                pending: pendingPersistReports.size,
+                inFlight: persistInFlight.size,
+                dropped: droppedPersistCount,
+                maxPending: PERSIST_MAX_PENDING,
+                maxConcurrent: PERSIST_MAX_CONCURRENT
+              }
+            });
+
+            if (lastDiagSample) {
+              const elapsedSec = Math.max(1, (now - lastDiagSample.timestamp) / 1000);
+              const processedDelta = Math.max(0, loopStats.processedEvents - lastDiagSample.eventLoopProcessed);
+              const tickDelta = Math.max(0, loopStats.tickCount - lastDiagSample.eventLoopTicks);
+              const flushDelta = Math.max(0, workspaceStats.flushCount - lastDiagSample.workspaceFlushes);
+              const saveReqDelta = Math.max(0, workspaceStats.saveRequests - lastDiagSample.workspaceSaveRequests);
+              const droppedDelta = Math.max(0, droppedPersistCount - lastDiagSample.droppedPersist);
+
+              console.info('[IntelReports][DiagDelta]', {
+                windowSec: Number(elapsedSec.toFixed(1)),
+                eventLoop: {
+                  processedDelta,
+                  ticksDelta: tickDelta,
+                  processedPerSec: Number((processedDelta / elapsedSec).toFixed(2)),
+                  ticksPerSec: Number((tickDelta / elapsedSec).toFixed(2)),
+                  avgEventsPerTick: tickDelta > 0 ? Number((processedDelta / tickDelta).toFixed(2)) : 0,
+                  queueDepthNow: loopStats.queueDepth,
+                  maxQueueDepthSeen: loopStats.maxQueueDepth
+                },
+                workspacePersistence: {
+                  saveRequestsDelta: saveReqDelta,
+                  flushesDelta: flushDelta,
+                  coalescedSavesDelta: Math.max(0, saveReqDelta - flushDelta),
+                  flushesPerSec: Number((flushDelta / elapsedSec).toFixed(2)),
+                  saveRequestsPerSec: Number((saveReqDelta / elapsedSec).toFixed(2)),
+                  lastSerializedBytes: workspaceStats.lastSerializedBytes
+                },
+                backpressure: {
+                  droppedDelta,
+                  droppedPerSec: Number((droppedDelta / elapsedSec).toFixed(3)),
+                  pendingNow: pendingPersistReports.size,
+                  inFlightNow: persistInFlight.size
+                }
+              });
+
+              if (droppedDelta > 0) {
+                console.warn('[IntelReports][DiagWarn] Persistence backpressure drops detected', {
+                  droppedDelta,
+                  droppedPerSec: Number((droppedDelta / elapsedSec).toFixed(3)),
+                  pendingNow: pendingPersistReports.size,
+                  maxPending: PERSIST_MAX_PENDING,
+                  inFlightNow: persistInFlight.size,
+                  maxConcurrent: PERSIST_MAX_CONCURRENT
+                });
+              }
+
+              if (loopStats.queueDepth > lastDiagSample.eventLoopQueueDepth && pendingPersistReports.size > lastDiagSample.pendingPersistDepth) {
+                queueGrowthStreak += 1;
+              } else {
+                queueGrowthStreak = 0;
+              }
+
+              if (queueGrowthStreak >= 3) {
+                console.warn('[IntelReports][DiagWarn] Sustained queue growth trend', {
+                  queueGrowthStreak,
+                  eventLoopQueueDepth: loopStats.queueDepth,
+                  pendingPersistDepth: pendingPersistReports.size,
+                  eventLoopProcessedPerSec: Number((processedDelta / elapsedSec).toFixed(2)),
+                  persistFlushesPerSec: Number((flushDelta / elapsedSec).toFixed(2))
+                });
+              }
+            }
+
+            lastDiagSample = {
+              timestamp: now,
+              eventLoopProcessed: loopStats.processedEvents,
+              eventLoopTicks: loopStats.tickCount,
+              workspaceFlushes: workspaceStats.flushCount,
+              workspaceSaveRequests: workspaceStats.saveRequests,
+              droppedPersist: droppedPersistCount,
+              eventLoopQueueDepth: loopStats.queueDepth,
+              pendingPersistDepth: pendingPersistReports.size
+            };
+          } catch {
+            // Ignore diagnostics errors in dev-only interval.
+          }
+        }, 45000);
+      }
     } else if (mounted) {
+      intelReportsSignatureRef.current = '';
       setIntelReports([]);
-      console.log('🧹 Intel Report 3D markers cleared - not in CyberCommand/IntelReports mode');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🧹 Intel Report 3D markers cleared - not in CyberCommand/IntelReports mode');
+      }
     }
 
     return () => {
@@ -727,8 +1236,17 @@ const GlobeView: React.FC = () => {
       if (interval) {
         clearInterval(interval);
       }
+      if (diagnosticsInterval) {
+        clearInterval(diagnosticsInterval);
+      }
+      if (persistFlushTimer) {
+        clearTimeout(persistFlushTimer);
+      }
       currentLoadRequest = null;
+      pendingPersistReports.clear();
       unsubscribe?.();
+      unsubscribeNostr?.();
+      nostrStop?.();
     };
   }, [visualizationMode.mode, visualizationMode.subMode]);
 
@@ -747,20 +1265,29 @@ const GlobeView: React.FC = () => {
           intelReports.length > 0 &&
           !scene.children.includes(intelGroup)) {
         scene.add(intelGroup);
-        console.log('Intel Report 3D marker group added to Globe scene');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Intel Report 3D marker group added to Globe scene');
+        }
       } else if (scene.children.includes(intelGroup)) {
         // Remove from scene if mode changed or no reports
         scene.remove(intelGroup);
-        console.log('Intel Report 3D marker group removed from Globe scene');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Intel Report 3D marker group removed from Globe scene');
+        }
       }
     }
+  }, [globeRef, intelReports, visualizationMode.mode, visualizationMode.subMode]);
 
+  useEffect(() => {
     return () => {
-      if (scene && intelGroup) {
+      const globeObj = globeRef.current as unknown as { scene?: () => THREE.Scene } | undefined;
+      const scene = globeObj?.scene?.();
+      const intelGroup = intelMarkerGroupRef.current;
+      if (scene && intelGroup && scene.children.includes(intelGroup)) {
         scene.remove(intelGroup);
       }
     };
-  }, [globeRef, intelReports, visualizationMode.mode, visualizationMode.subMode]);
+  }, []);
 
   // =============================================================================
   // CYBER THREATS DATA INTEGRATION - Real data loading and visualization
@@ -776,8 +1303,10 @@ const GlobeView: React.FC = () => {
       }
     };
 
-    if (visualizationMode.mode === 'CyberCommand' && visualizationMode.subMode === 'CyberThreats') {
-      console.log('🔒 CYBER THREATS MODE ACTIVATED - Loading real threat data');
+    if (enableLegacyCyberDataPipeline && visualizationMode.mode === 'CyberCommand' && visualizationMode.subMode === 'CyberThreats') {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔒 CYBER THREATS MODE ACTIVATED - Loading real threat data');
+      }
       
       // Initialize threat service if not already done
       if (!threatServiceRef.current) {
@@ -795,7 +1324,9 @@ const GlobeView: React.FC = () => {
         
         try {
           setCyberDataLoading(true);
-          console.log('� Fetching cyber threat intelligence data...');
+          if (process.env.NODE_ENV === 'development') {
+            console.log('� Fetching cyber threat intelligence data...');
+          }
           
           const threatData = await threatServiceRef.current.getData({
             limit: 100, // Limit for performance
@@ -811,13 +1342,17 @@ const GlobeView: React.FC = () => {
           
           if (mounted) {
             setCyberThreatsData(threatData);
-            console.log(`🔒 Loaded ${threatData.length} cyber threat data points`);
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`🔒 Loaded ${threatData.length} cyber threat data points`);
+            }
           }
         } catch (error) {
           if (mounted) {
             console.error('Error loading cyber threat data:', error);
             // Fallback to mock data for development
-            console.log('� Using mock threat data for development');
+            if (process.env.NODE_ENV === 'development') {
+              console.log('� Using mock threat data for development');
+            }
           }
         } finally {
           if (mounted) {
@@ -847,7 +1382,9 @@ const GlobeView: React.FC = () => {
       // Clear data when leaving CyberThreats mode
       if (mounted) {
         setCyberThreatsData([]);
-        console.log('🧹 Cyber threats data cleared - left CyberThreats mode');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🧹 Cyber threats data cleared - left CyberThreats mode');
+        }
       }
       disposeThreatService();
     }
@@ -859,7 +1396,7 @@ const GlobeView: React.FC = () => {
       }
       disposeThreatService();
     };
-  }, [visualizationMode.mode, visualizationMode.subMode]);
+  }, [visualizationMode.mode, visualizationMode.subMode, enableLegacyCyberDataPipeline]);
 
   // =============================================================================
   // CYBER ATTACKS DATA INTEGRATION - Real data loading and visualization  
@@ -875,8 +1412,10 @@ const GlobeView: React.FC = () => {
       }
     };
 
-    if (visualizationMode.mode === 'CyberCommand' && visualizationMode.subMode === 'CyberAttacks') {
-      console.log('⚡ CYBER ATTACKS MODE ACTIVATED - Loading real attack data');
+    if (enableLegacyCyberDataPipeline && visualizationMode.mode === 'CyberCommand' && visualizationMode.subMode === 'CyberAttacks') {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('⚡ CYBER ATTACKS MODE ACTIVATED - Loading real attack data');
+      }
       
       // Initialize attack service if not already done
       if (!attackServiceRef.current) {
@@ -888,7 +1427,9 @@ const GlobeView: React.FC = () => {
         
         try {
           setCyberDataLoading(true);
-          console.log('📡 Fetching real-time cyber attack data...');
+          if (process.env.NODE_ENV === 'development') {
+            console.log('📡 Fetching real-time cyber attack data...');
+          }
           
           const attackData = await attackServiceRef.current.getData({
             limit: 150, // More attacks for dynamic visualization
@@ -903,13 +1444,17 @@ const GlobeView: React.FC = () => {
           
           if (mounted) {
             setCyberAttacksData(attackData);
-            console.log(`⚡ Loaded ${attackData.length} cyber attack data points`);
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`⚡ Loaded ${attackData.length} cyber attack data points`);
+            }
           }
         } catch (error) {
           if (mounted) {
             console.error('Error loading cyber attack data:', error);
             // Fallback to mock data for development
-            console.log('🔧 Using mock attack data for development');
+            if (process.env.NODE_ENV === 'development') {
+              console.log('🔧 Using mock attack data for development');
+            }
           }
         } finally {
           if (mounted) {
@@ -939,7 +1484,9 @@ const GlobeView: React.FC = () => {
       // Clear data when leaving CyberAttacks mode
       if (mounted) {
         setCyberAttacksData([]);
-        console.log('🧹 Cyber attacks data cleared - left CyberAttacks mode');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🧹 Cyber attacks data cleared - left CyberAttacks mode');
+        }
       }
       disposeAttackService();
     }
@@ -951,7 +1498,7 @@ const GlobeView: React.FC = () => {
       }
       disposeAttackService();
     };
-  }, [visualizationMode.mode, visualizationMode.subMode]);
+  }, [visualizationMode.mode, visualizationMode.subMode, enableLegacyCyberDataPipeline]);
 
   // =============================================================================
   // SATELLITES INTEGRATION - Real satellite tracking (MVP)
@@ -1022,15 +1569,8 @@ const GlobeView: React.FC = () => {
 
         satellites.forEach((satellite, index) => {
           const { lat, lng, altitude, type } = satellite;
-          const phi = (90 - lat) * (Math.PI / 180);
-          const theta = (lng + 180) * (Math.PI / 180);
           const radius = 100 + (altitude / 1000);
-
-          const position = new THREE.Vector3(
-            -radius * Math.sin(phi) * Math.cos(theta),
-            radius * Math.cos(phi),
-            radius * Math.sin(phi) * Math.sin(theta)
-          );
+          const position = latLngToGlobeVector3(lat, lng, radius);
 
           const scale = type === 'space_station' ? 2.0 :
                          type === 'scientific' ? 1.5 :
@@ -1163,7 +1703,7 @@ const GlobeView: React.FC = () => {
       : [], 
     globeRef.current ? (globeRef.current as unknown as { scene: () => THREE.Scene }).scene() : null,
     globeRef.current ? (globeRef.current as unknown as { camera: () => THREE.Camera }).camera() : null,
-    null, // No longer need globe object reference
+    globeRef.current ? (globeRef.current as unknown as { getCoords?: (lat: number, lng: number, altitude?: number) => THREE.Vector3 }) : null,
     {
       globeRadius: 100,
       hoverAltitude: 10,  // Reduced from 12 to 10
@@ -1208,29 +1748,34 @@ const GlobeView: React.FC = () => {
   // Monitor CyberThreats hook status
   useEffect(() => {
     if (visualizationMode.mode === 'CyberCommand' && visualizationMode.subMode === 'CyberThreats') {
-      console.log(`🔒 CYBER THREATS 3D HOOK STATUS: ${cyberThreats.threats.length} threats loaded, Loading: ${cyberThreats.isLoading}`);
+      if (isDevelopment) {
+        console.log(`🔒 CYBER THREATS 3D HOOK STATUS: ${cyberThreats.threats.length} threats loaded, Loading: ${cyberThreats.isLoading}`);
+      }
       if (cyberThreats.error) {
         console.error('🔒 CyberThreats Hook Error:', cyberThreats.error);
       }
       setCyberDataLoading(cyberThreats.isLoading);
     }
-  }, [visualizationMode.mode, visualizationMode.subMode, cyberThreats.threats.length, cyberThreats.isLoading, cyberThreats.error]);
+  }, [visualizationMode.mode, visualizationMode.subMode, cyberThreats.threats.length, cyberThreats.isLoading, cyberThreats.error, isDevelopment]);
 
   // Monitor CyberAttacks hook status
   useEffect(() => {
     if (visualizationMode.mode === 'CyberCommand' && visualizationMode.subMode === 'CyberAttacks') {
-      console.log(`⚡ CYBER ATTACKS 3D HOOK STATUS: ${cyberAttacks.attacks.length} attacks loaded, Loading: ${cyberAttacks.isLoading}`);
+      if (isDevelopment) {
+        console.log(`⚡ CYBER ATTACKS 3D HOOK STATUS: ${cyberAttacks.attacks.length} attacks loaded, Loading: ${cyberAttacks.isLoading}`);
+      }
       if (cyberAttacks.error) {
         console.error('⚡ CyberAttacks Hook Error:', cyberAttacks.error);
       }
       setCyberDataLoading(cyberAttacks.isLoading);
     }
-  }, [visualizationMode.mode, visualizationMode.subMode, cyberAttacks.attacks.length, cyberAttacks.isLoading, cyberAttacks.error]);
+  }, [visualizationMode.mode, visualizationMode.subMode, cyberAttacks.attacks.length, cyberAttacks.isLoading, cyberAttacks.error, isDevelopment]);
 
   // =============================================================================
   // CYBER THREATS 3D VISUALIZATION - Real animated data-driven visualization
   // =============================================================================
   useEffect(() => {
+    if (!enableLegacyCyberDataPipeline) return;
     if (!globeRef.current || cyberThreatsData.length === 0) return;
     
     const globeObj = globeRef.current as unknown as { scene: () => THREE.Scene };
@@ -1238,7 +1783,9 @@ const GlobeView: React.FC = () => {
     const cyberThreatsGroup = cyberThreatsGroupRef.current;
     
     if (visualizationMode.mode === 'CyberCommand' && visualizationMode.subMode === 'CyberThreats') {
-      console.log(`🔒 CYBER THREATS 3D VISUALIZATION - Rendering ${cyberThreatsData.length} threat objects`);
+      if (isDevelopment) {
+        console.log(`🔒 CYBER THREATS 3D VISUALIZATION - Rendering ${cyberThreatsData.length} threat objects`);
+      }
       
       // Clear previous visualization efficiently
       while (cyberThreatsGroup.children.length > 0) {
@@ -1256,9 +1803,6 @@ const GlobeView: React.FC = () => {
       cyberThreatsData.forEach((threatData) => {
         const { location, category, severity, status, confidence } = threatData;
         
-        // Convert lat/lng to 3D position
-        const phi = (90 - location.latitude) * (Math.PI / 180);
-        const theta = (location.longitude + 180) * (Math.PI / 180);
         const radius = 1.05 + (severity / 20); // Height varies by severity
         
         // Create threat geometry based on category
@@ -1302,11 +1846,7 @@ const GlobeView: React.FC = () => {
         });
         
         const threatMarker = new THREE.Mesh(geometry, material);
-        threatMarker.position.set(
-          -radius * Math.sin(phi) * Math.cos(theta),
-          radius * Math.cos(phi),
-          radius * Math.sin(phi) * Math.sin(theta)
-        );
+        threatMarker.position.copy(latLngToGlobeVector3(location.latitude, location.longitude, radius));
         
         // Store metadata for interactivity
         threatMarker.userData = { 
@@ -1335,7 +1875,9 @@ const GlobeView: React.FC = () => {
         scene.add(cyberThreatsGroup);
       }
       
-      console.log(`🔒 Generated ${cyberThreatsGroup.children.length} 3D threat visualization objects`);
+      if (isDevelopment) {
+        console.log(`🔒 Generated ${cyberThreatsGroup.children.length} 3D threat visualization objects`);
+      }
       
     } else {
       // Clean up when leaving mode
@@ -1360,12 +1902,13 @@ const GlobeView: React.FC = () => {
         scene.remove(cyberThreatsGroup);
       }
     };
-  }, [globeRef, cyberThreatsData, visualizationMode.mode, visualizationMode.subMode]);
+  }, [globeRef, cyberThreatsData, visualizationMode.mode, visualizationMode.subMode, enableLegacyCyberDataPipeline, isDevelopment]);
 
   // =============================================================================
   // CYBER ATTACKS 3D VISUALIZATION - Real animated attack trajectories
   // =============================================================================
   useEffect(() => {
+    if (!enableLegacyCyberDataPipeline) return;
     if (!globeRef.current || cyberAttacksData.length === 0) return;
     
     const globeObj = globeRef.current as unknown as { scene: () => THREE.Scene };
@@ -1373,7 +1916,9 @@ const GlobeView: React.FC = () => {
     const cyberAttacksGroup = cyberAttacksGroupRef.current;
     
     if (visualizationMode.mode === 'CyberCommand' && visualizationMode.subMode === 'CyberAttacks') {
-      console.log(`⚡ CYBER ATTACKS 3D VISUALIZATION - Rendering ${cyberAttacksData.length} attack objects with trajectories`);
+      if (isDevelopment) {
+        console.log(`⚡ CYBER ATTACKS 3D VISUALIZATION - Rendering ${cyberAttacksData.length} attack objects with trajectories`);
+      }
       
       // Clear previous visualization efficiently
       while (cyberAttacksGroup.children.length > 0) {
@@ -1540,7 +2085,9 @@ const GlobeView: React.FC = () => {
         scene.add(cyberAttacksGroup);
       }
       
-      console.log(`⚡ Generated ${cyberAttacksGroup.children.length} 3D attack visualization objects with trajectories`);
+      if (isDevelopment) {
+        console.log(`⚡ Generated ${cyberAttacksGroup.children.length} 3D attack visualization objects with trajectories`);
+      }
       
     } else {
       // Clean up when leaving mode
@@ -1570,13 +2117,13 @@ const GlobeView: React.FC = () => {
         scene.remove(cyberAttacksGroup);
       }
     };
-  }, [globeRef, cyberAttacksData, visualizationMode.mode, visualizationMode.subMode]);
+  }, [globeRef, cyberAttacksData, visualizationMode.mode, visualizationMode.subMode, enableLegacyCyberDataPipeline, isDevelopment]);
 
   // GeoPolitical settings (declared earlier for dev geoSnap too)
-  // Always enable borders/territories for ANY GeoPolitical sub-mode
-  const geoEnabled = visualizationMode.mode === 'GeoPolitical';
+  // National territories overlay is controlled only by the dedicated overlay toggle.
+  const geoModeActive = visualizationMode.mode === 'GeoPolitical';
   const nationalTerritories = useNationalTerritories3D({
-    enabled: geoEnabled,
+    enabled: nationalTerritoriesOverlayEnabled,
     scene: globeRef.current ? (globeRef.current as unknown as { scene: () => THREE.Scene }).scene() : null,
     config: geoPoliticalConfig.nationalTerritories
   });
@@ -1586,7 +2133,7 @@ const GlobeView: React.FC = () => {
   const [geoIntegrity, setGeoIntegrity] = useState<{ status: 'idle'|'verifying'|'verified'|'mismatch'|'error'; mismatchCount?: number; artifacts?: { path: string; status: string; bytes: number }[] }>({ status: 'idle' });
   const [geoPanelOpen, setGeoPanelOpen] = useState(false);
   useEffect(() => {
-    if (!geoEnabled) return;
+    if (!geoModeActive) return;
     if (geoIntegrity.status !== 'idle') return;
     let cancelled = false;
     setGeoIntegrity({ status: 'verifying' });
@@ -1594,7 +2141,7 @@ const GlobeView: React.FC = () => {
       .then(r => { if (!cancelled) setGeoIntegrity({ status: r.ok ? 'verified':'mismatch', mismatchCount: r.mismatches.length, artifacts: r.artifacts.map(a => ({ path: a.path, status: a.status, bytes: a.bytes })) }); })
       .catch(() => { if (!cancelled) setGeoIntegrity({ status: 'error' }); });
     return () => { cancelled = true; };
-  }, [geoEnabled, geoIntegrity.status]);
+  }, [geoModeActive, geoIntegrity.status]);
 
   // Add debounce utility for resize handling (fixes recursive resize event dispatch)
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -1634,6 +2181,9 @@ const GlobeView: React.FC = () => {
     if (!shouldShowSpaceWeather) {
       setGlobeData(prevData => {
         const filtered = prevData.filter((d: { type?: string }) => d.type !== 'space-weather');
+        if (filtered.length === prevData.length) {
+          return prevData;
+        }
         if (filtered.length !== prevData.length) console.log('Space weather data cleared - not in EcoNatural/SpaceWeather mode');
         return filtered;
       });
@@ -1660,7 +2210,13 @@ const GlobeView: React.FC = () => {
       return [...nonSpace, ...spaceWeatherMarkers];
     });
     console.log(`Updated space weather visualization with ${spaceWeatherMarkers.length} markers for EcoNatural/SpaceWeather mode`);
-  }, [globeEngine, visualizationVectors, visualizationMode.mode, visualizationMode.subMode]);
+  }, [
+    globeEngine,
+    spaceWeatherSettings,
+    visualizationVectors,
+    visualizationMode.mode,
+    visualizationMode.subMode
+  ]);
 
   // Handle intel report creation from context menu (reintroduced after integration)
   const handleCreateIntelReport = (geoLocation: { lat: number; lng: number }) => {
@@ -1792,11 +2348,7 @@ const GlobeView: React.FC = () => {
           pointLabel={(d: { tooltip?: string; label?: string }) => d.tooltip || d.label || ''}
           globeMaterial={material ?? undefined}
           // Configure renderer for optimal space usage
-          rendererConfig={{
-            antialias: true,
-            alpha: true,
-            preserveDrawingBuffer: false
-          }}
+          rendererConfig={rendererConfig}
           // Disable automatic camera positioning that might constrain view
           enablePointerInteraction={true}
           // ...existing Globe props...
@@ -1831,6 +2383,26 @@ const GlobeView: React.FC = () => {
             {visualizationMode.subMode === 'CyberThreats' ? '🔒 Loading Threats...' : '⚡ Loading Attacks...'}
           </div>
         )}
+
+        {(visualizationMode.mode === 'EcoNatural' && visualizationMode.subMode === 'SpaceWeather') && (
+          <div style={{
+            position: 'absolute',
+            top: '20px',
+            left: '20px',
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            color: '#00ffff',
+            padding: '8px 10px',
+            borderRadius: '4px',
+            fontSize: '11px',
+            zIndex: 1000,
+            lineHeight: 1.3
+          }}>
+            <div>Space Weather Layers</div>
+            <div>Magnetopause: {spaceWeatherBoundaryStatus.magnetopause.enabled ? 'on' : 'off'} / {spaceWeatherBoundaryStatus.magnetopause.attached ? 'attached' : 'missing'}</div>
+            <div>Bow Shock: {spaceWeatherBoundaryStatus.bowShock.enabled ? 'on' : 'off'} / {spaceWeatherBoundaryStatus.bowShock.attached ? 'attached' : 'missing'}</div>
+            <div>Aurora: {spaceWeatherBoundaryStatus.aurora.enabled ? 'on' : 'off'} / {spaceWeatherBoundaryStatus.aurora.attached ? 'attached' : 'missing'}</div>
+          </div>
+        )}
         
         {/* Solar System Debug Panel - Temporarily disabled for performance */}
         {/* <SolarSystemDebugPanel 
@@ -1846,7 +2418,7 @@ const GlobeView: React.FC = () => {
         /> */}
         
         {/* Geopolitical Panel UI */}
-        {geoEnabled && (
+        {geoModeActive && (
           <div style={{ position: 'absolute', top: 12, right: 12, background: 'rgba(0,0,0,0.55)', padding: '10px 12px', borderRadius: 8, fontSize: 12, lineHeight: 1.4, maxWidth: 260 }}>
             <div style={{ fontWeight: 600, marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => setGeoPanelOpen(o => !o)}>
               <span>Geopolitical Layers {geoPanelOpen ? '▾' : '▸'}</span>

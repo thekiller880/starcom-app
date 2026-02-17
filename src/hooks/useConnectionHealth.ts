@@ -7,6 +7,55 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useNetworkValidation } from './useNetworkValidation';
 
+const CONNECTION_HEALTH_INTERVAL_MS = 30000;
+const heartbeatSubscribers = new Set<() => void>();
+let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+let heartbeatVisibilityListener: (() => void) | null = null;
+
+const emitHeartbeat = () => {
+  heartbeatSubscribers.forEach((subscriber) => subscriber());
+};
+
+const subscribeConnectionHealthHeartbeat = (subscriber: () => void): (() => void) => {
+  heartbeatSubscribers.add(subscriber);
+
+  if (!heartbeatInterval) {
+    heartbeatInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
+      emitHeartbeat();
+    }, CONNECTION_HEALTH_INTERVAL_MS);
+  }
+
+  if (!heartbeatVisibilityListener && typeof document !== 'undefined') {
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        return;
+      }
+      emitHeartbeat();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    heartbeatVisibilityListener = onVisibilityChange;
+  }
+
+  return () => {
+    heartbeatSubscribers.delete(subscriber);
+
+    if (heartbeatSubscribers.size === 0) {
+      if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+      }
+
+      if (heartbeatVisibilityListener && typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', heartbeatVisibilityListener);
+        heartbeatVisibilityListener = null;
+      }
+    }
+  };
+};
+
 export interface ConnectionHealth {
   overall: 'excellent' | 'good' | 'poor' | 'critical';
   wallet: {
@@ -52,7 +101,7 @@ export interface ConnectionDiagnostics {
 
 export function useConnectionHealth() {
   const { wallet, connected, publicKey } = useWallet();
-  const { currentNetwork, validateNetwork } = useNetworkValidation();
+  const { currentNetwork } = useNetworkValidation();
   const [health, setHealth] = useState<ConnectionHealth>({
     overall: 'critical',
     wallet: {
@@ -182,13 +231,11 @@ export function useConnectionHealth() {
     try {
       // Test wallet responsiveness
       const isWalletResponsive = await testWalletResponsiveness();
-      
-      // Test network connectivity
-      const networkValidation = await validateNetwork(currentNetwork.cluster);
-      
+
       // Calculate health metrics
       const walletHealth = connected && isWalletResponsive ? 1 : 0;
-      const networkHealth = networkValidation.isValid ? Math.max(0, 1 - networkValidation.latency / 5000) : 0;
+      const networkLatency = currentNetwork.latency ?? 0;
+      const networkHealth = currentNetwork.isConnected ? Math.max(0, 1 - networkLatency / 5000) : 0;
       
       const recentErrors = performanceRef.current.errors.filter(
         error => Date.now() - error.timestamp < 300000
@@ -211,12 +258,12 @@ export function useConnectionHealth() {
         recommendations.push('Try refreshing the page or reconnecting wallet');
       }
 
-      if (!networkValidation.isValid) {
+      if (!currentNetwork.isConnected || currentNetwork.error) {
         issues.push(`Network connectivity issues on ${currentNetwork.cluster}`);
         recommendations.push('Check internet connection or try different network');
       }
 
-      if (networkValidation.latency > 3000) {
+      if (networkLatency > 3000) {
         issues.push('High network latency detected');
         recommendations.push('Consider switching to a faster network endpoint');
       }
@@ -236,7 +283,7 @@ export function useConnectionHealth() {
           errorCount: recentErrors.length
         },
         network: {
-          latency: networkValidation.latency,
+          latency: networkLatency,
           stability: networkHealth,
           blockHeight: currentNetwork.blockHeight,
           lastCheck: Date.now()
@@ -247,7 +294,7 @@ export function useConnectionHealth() {
 
       // Update performance tracking
       performanceRef.current.connectionAttempts++;
-      if (connected && isWalletResponsive && networkValidation.isValid) {
+      if (connected && isWalletResponsive && currentNetwork.isConnected && !currentNetwork.error) {
         performanceRef.current.successfulConnections++;
       }
 
@@ -257,7 +304,7 @@ export function useConnectionHealth() {
         error: error instanceof Error ? error.message : 'Health monitoring error'
       });
     }
-  }, [connected, testWalletResponsiveness, validateNetwork, currentNetwork, calculateHealthScore, health.wallet.lastActivity]);
+  }, [connected, testWalletResponsiveness, currentNetwork, calculateHealthScore, health.wallet.lastActivity]);
 
   /**
    * Reset health monitoring
@@ -304,13 +351,19 @@ export function useConnectionHealth() {
 
   // Monitor health periodically
   useEffect(() => {
-    // Initial health check
-    monitorHealth();
+    const runHealthCheck = () => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
+      void monitorHealth();
+    };
 
-    // Set up periodic monitoring
-    const interval = setInterval(monitorHealth, 15000); // Every 15 seconds
-    
-    return () => clearInterval(interval);
+    // Initial health check
+    runHealthCheck();
+
+    const unsubscribeHeartbeat = subscribeConnectionHealthHeartbeat(runHealthCheck);
+
+    return unsubscribeHeartbeat;
   }, [monitorHealth]);
 
   // Reset monitoring when wallet changes

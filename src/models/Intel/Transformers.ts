@@ -6,6 +6,9 @@ import { Intelligence } from './Intelligence';
 import { IntelReportData } from '../IntelReportData';
 import { SourceMetadata } from './Sources';
 
+// Legacy alias kept to satisfy existing transformer signatures without enforcing classification
+type IntelligenceReportData = IntelReportData & Record<string, unknown>;
+
 /**
  * Raw collection data interface
  */
@@ -66,10 +69,6 @@ export class IntelligenceTransformers {
       reportNumber: legacy.id || this.generateReportNumber(),
       version: '1.0',
       
-      // Classification (default to unclassified)
-      classification: {
-        level: legacy.classification || 'UNCLASS'
-      },
       distributionType: 'ROUTINE',
       distributionList: [],
       handlingInstructions: [],
@@ -85,7 +84,9 @@ export class IntelligenceTransformers {
       // Sources (convert from legacy)
       sources: this.convertLegacySources(legacy),
       sourceSummary: this.generateSourceSummary(legacy),
-      collectionDisciplines: legacy.sources || ['OSINT'],
+      collectionDisciplines: Array.isArray((legacy as any).collectionDisciplines)
+        ? ((legacy as any).collectionDisciplines as any)
+        : ['OSINT'],
       
       // Geographic scope
       geographicScope: {
@@ -100,8 +101,7 @@ export class IntelligenceTransformers {
       // Timeframe
       timeframe: {
         start: legacy.timestamp,
-        end: legacy.timestamp,
-        relevantUntil: legacy.timestamp + (30 * 24 * 60 * 60 * 1000) // 30 days
+        end: legacy.timestamp
       },
       
       // Associated products
@@ -180,10 +180,10 @@ export class IntelligenceTransformers {
       signature: enhanced.signature,
       
       // Enhanced fields mapped to legacy optional fields
-      classification: enhanced.classification.level,
+      classification: undefined,
       sources: enhanced.collectionDisciplines,
       confidence: enhanced.confidence,
-      priority: this.mapDistributionToPriority(enhanced.distributionType),
+      priority: this.mapDistributionToPriority(String(enhanced.distributionType || '')),
       
       // UI fields
       subtitle: enhanced.subtitle,
@@ -209,10 +209,14 @@ export class IntelligenceTransformers {
     return {
       id: this.generateId(),
       source: 'OSINT', // Default, should be determined by source
-      classification: 'UNCLASS',
       reliability: 'C', // Default, should be determined by source
       timestamp: Date.now(),
       collectedBy: data.sourceId,
+      qualityAssessment: {
+        sourceQuality: 'unverified',
+        visibility: 'public',
+        sensitivity: 'open'
+      },
       
       // Geographic context
       latitude: data.location?.lat,
@@ -248,7 +252,7 @@ export class IntelligenceTransformers {
       threats: [],
       opportunities: [],
       recommendations: []
-    };
+    } as Intelligence;
   }
 
   /**
@@ -290,7 +294,6 @@ export class IntelligenceTransformers {
     // Aggregate sources and determine overall reliability
     const sources = [...new Set(intelRecords.map(intel => intel.source))];
     const avgReliability = this.calculateAverageReliability(intelRecords);
-    const overallClassification = this.determineHighestClassification(intelRecords);
 
     // Generate content from intel data
     const content = this.generateReportContent(intelRecords, analysisContext);
@@ -310,11 +313,6 @@ export class IntelligenceTransformers {
       conclusions: this.generateConclusionsFromIntel(intelRecords, keyFindings),
       recommendations,
       intelligenceGaps: this.identifyIntelligenceGaps(intelRecords, analysisContext.keyQuestions),
-      
-      // Classification - use highest from source intel
-      classification: {
-        level: overallClassification
-      },
       
       // Source attribution
       sources: intelRecords.map(intel => this.convertIntelToSourceMetadata(intel)),
@@ -355,7 +353,7 @@ export class IntelligenceTransformers {
       title: report.title,
       content: report.content,
       reportType: report.reportType,
-      classification: report.classification.level,
+      classification: undefined,
       
       executiveSummary: report.executiveSummary,
       keyFindings: this.arrayToString(report.keyFindings),
@@ -403,24 +401,6 @@ export class IntelligenceTransformers {
     }, 0);
     
     return Math.round(totalScore / intelRecords.length);
-  }
-
-  /**
-   * Determine highest classification level from intel records
-   */
-  private static determineHighestClassification(intelRecords: Intel[]): ClassificationLevel {
-    const levels = ['UNCLASS', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
-    let highest = 'UNCLASS';
-    
-    for (const intel of intelRecords) {
-      const currentIndex = levels.indexOf(intel.classification);
-      const highestIndex = levels.indexOf(highest);
-      if (currentIndex > highestIndex) {
-        highest = intel.classification;
-      }
-    }
-    
-    return highest as ClassificationLevel;
   }
 
   /**
@@ -710,13 +690,7 @@ export class IntelligenceTransformers {
    */
   private static generateRecommendationsFromIntel(intelRecords: Intel[], context: any): string[] {
     const recommendations: string[] = [];
-    
-    // Based on classification levels
-    const classified = intelRecords.filter(intel => intel.classification !== 'UNCLASS');
-    if (classified.length > 0) {
-      recommendations.push('Maintain appropriate security controls for classified intelligence');
-    }
-    
+
     // Based on reliability concerns
     const lowReliability = intelRecords.filter(intel => ['D', 'E', 'F', 'X'].includes(intel.reliability));
     if (lowReliability.length > 0) {
@@ -765,11 +739,6 @@ export class FormTransformers {
       title: formData.title?.trim(),
       content: formData.content?.trim(),
       reportType: formData.reportType || 'ANALYSIS_REPORT',
-      
-      classification: {
-        level: formData.classification || 'UNCLASS'
-      },
-      
       executiveSummary: formData.executiveSummary?.trim(),
       keyFindings: this.parseStringArray(formData.keyFindings),
       analysisAndAssessment: formData.analysis?.trim(),
@@ -802,8 +771,6 @@ export class FormTransformers {
       title: report.title,
       content: report.content,
       reportType: report.reportType,
-      classification: report.classification.level,
-      
       executiveSummary: report.executiveSummary,
       keyFindings: this.arrayToString(report.keyFindings),
       analysis: report.analysisAndAssessment,

@@ -1,79 +1,113 @@
-import React, { useState, useEffect } from 'react';
-import { useApplicationRouter } from '../../hooks/useApplicationRouter';
-import { useDiscordStats } from '../../hooks/useDiscordStats';
+import React, { useEffect, useRef, useState } from 'react';
+import { usePrimaryMarqueeData, type PrimaryMarqueeSignal } from './usePrimaryMarqueeData';
 import styles from './MainMarqueeTopBar.module.css';
 
-const MainMarqueeTopBar: React.FC = () => {
-  const { currentApp, getApplication } = useApplicationRouter();
-  const { onlineCount } = useDiscordStats();
-  const [currentTime, setCurrentTime] = useState<string>('');
-  const [currentDate, setCurrentDate] = useState<string>('');
-  
-  // Update time every minute
+const AnimatedSignalItem: React.FC<{ signal: PrimaryMarqueeSignal }> = ({ signal }) => {
+  const [currentValue, setCurrentValue] = useState(signal.value);
+  const [previousValue, setPreviousValue] = useState(signal.value);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [valueWidthCh, setValueWidthCh] = useState(Math.max(signal.value.length + 2, 9));
+
   useEffect(() => {
-    const updateDateTime = () => {
-      const now = new Date();
-      setCurrentTime(now.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit'
-      }));
-      setCurrentDate(now.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      }));
+    if (signal.value === currentValue) {
+      return;
+    }
+
+    setPreviousValue(currentValue);
+    setCurrentValue(signal.value);
+    setValueWidthCh((prev) => Math.max(prev, signal.value.length + 2));
+    setIsAnimating(true);
+
+    const animationTimer = setTimeout(() => {
+      setIsAnimating(false);
+      setValueWidthCh(Math.max(signal.value.length + 2, 9));
+    }, 260);
+
+    return () => clearTimeout(animationTimer);
+  }, [signal.value, currentValue]);
+
+  return (
+    <span className={styles.marqueeItem}>
+      <span className={styles.marqueeLabel}>{signal.label}:</span>{' '}
+      <span
+        className={`${styles.marqueeValueSlot} ${isAnimating ? styles.animating : ''}`}
+        style={{ '--value-width-ch': `${valueWidthCh}ch` } as React.CSSProperties}
+      >
+        <span className={`${styles.marqueeValueLayer} ${styles.currentValue}`}>{currentValue}</span>
+        <span className={`${styles.marqueeValueLayer} ${styles.previousValue}`}>{previousValue}</span>
+      </span>
+    </span>
+  );
+};
+
+const MainMarqueeTopBar: React.FC = () => {
+  const { title, signals } = usePrimaryMarqueeData();
+  const marqueeContentRef = useRef<HTMLDivElement | null>(null);
+
+  const [renderedSignals, setRenderedSignals] = useState<PrimaryMarqueeSignal[]>(signals);
+  const pendingSignalsRef = useRef<PrimaryMarqueeSignal[]>(signals);
+
+  useEffect(() => {
+    pendingSignalsRef.current = signals;
+    if (renderedSignals.length === 0) {
+      setRenderedSignals(signals);
+      return;
+    }
+
+    const sameStructure = signals.length === renderedSignals.length && signals.every((signal, index) => {
+      const renderedSignal = renderedSignals[index];
+      return renderedSignal && renderedSignal.id === signal.id;
+    });
+
+    const hasValueChanges = sameStructure && signals.some((signal, index) => {
+      return renderedSignals[index].value !== signal.value;
+    });
+
+    if (hasValueChanges) {
+      setRenderedSignals(signals);
+    }
+  }, [signals, renderedSignals]);
+
+  useEffect(() => {
+    const node = marqueeContentRef.current;
+    if (!node) return;
+
+    const handleIteration = () => {
+      const nextSignals = pendingSignalsRef.current;
+      const hasChanges = nextSignals.length !== renderedSignals.length || nextSignals.some((nextSignal, index) => {
+        const currentSignal = renderedSignals[index];
+        return !currentSignal || currentSignal.id !== nextSignal.id || currentSignal.value !== nextSignal.value;
+      });
+
+      if (hasChanges) {
+        setRenderedSignals(nextSignals);
+      }
     };
-    
-    // Initial update
-    updateDateTime();
-    
-    // Set interval for updates
-    const interval = setInterval(updateDateTime, 60000);
-    
-    // Cleanup on unmount
-    return () => clearInterval(interval);
-  }, []);
-  
-  // Get current application info
-  const currentAppConfig = currentApp ? getApplication(currentApp) : null;
-  const currentTitle = currentAppConfig ? currentAppConfig.name : 'Starcom Platform';
-  
-  // Mock system status - in production this would come from context
-  const mockAlertLevel = 'MODERATE';
-  const mockConnectionStatus = 'SECURE';
-  const mockUpdatesAvailable = true;
-  
-  // Dynamic alert items - would come from a real notification system
-  const alertItems = [
-    'SYSTEM READY',
-    `${currentDate} | ${currentTime}`,
-    `CONNECTION ${mockConnectionStatus}`,
-    `THREAT LEVEL: ${mockAlertLevel}`,
-    `DISCORD: ${onlineCount} ${onlineCount === 1 ? 'OPERATIVE' : 'OPERATIVES'} ONLINE`,
-    mockUpdatesAvailable ? 'UPDATES AVAILABLE' : 'SYSTEM UP TO DATE',
-    'SENSORS ACTIVE'
-  ];
+
+    node.addEventListener('animationiteration', handleIteration);
+    return () => {
+      node.removeEventListener('animationiteration', handleIteration);
+    };
+  }, [renderedSignals]);
   
   return (
     <header className={styles.marqueeTopBar} aria-label="Status Information">
       <div className={styles.titleSection}>
-        <h1 className={styles.screenTitle}>{currentTitle}</h1>
+        <h1 className={styles.screenTitle}>{title}</h1>
       </div>
       
       <div className={styles.marqueeSection}>
-        <div className={styles.marqueeContent}>
+        <div ref={marqueeContentRef} className={styles.marqueeContent}>
           {/* First instance of content */}
-          {alertItems.map((item, index) => (
-            <React.Fragment key={`first-${index}`}>
-              <span className={styles.marqueeItem}>{item}</span>
-              <span className={styles.separator}>•</span>
+          {renderedSignals.map((signal) => (
+            <React.Fragment key={`first-${signal.id}`}>
+              <AnimatedSignalItem signal={signal} />
             </React.Fragment>
           ))}
           {/* Duplicate instance for seamless loop */}
-          {alertItems.map((item, index) => (
-            <React.Fragment key={`second-${index}`}>
-              <span className={styles.marqueeItem}>{item}</span>
-              <span className={styles.separator}>•</span>
+          {renderedSignals.map((signal) => (
+            <React.Fragment key={`second-${signal.id}`}>
+              <AnimatedSignalItem signal={signal} />
             </React.Fragment>
           ))}
         </div>

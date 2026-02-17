@@ -14,7 +14,8 @@ import type {
   CyberThreatData,
   ThreatCategory,
   ConfidenceLevel,
-  IOCType
+  IOCType,
+  ThreatSophistication
 } from '../../types/CyberThreats';
 
 import type { GeoCoordinate } from '../../types/CyberCommandVisualization';
@@ -354,6 +355,7 @@ export class ApiIntegrationService {
       // Create threat based on detection data
       const threat: CyberThreatData = {
         id: `vt_${type}_${ioc}_${Date.now()}`,
+        type: 'CyberThreats',
         threat_id: `VT-${ioc.substring(0, 8).toUpperCase()}`,
         name: `Malicious ${type.replace('_', ' ')} - ${ioc}`,
         description: `Detected by ${detections}/${totalScans} antivirus engines on VirusTotal`,
@@ -378,7 +380,11 @@ export class ApiIntegrationService {
           confidence: this.mapVirusTotalConfidence(detectionRatio),
           first_seen: data.scan_date ? new Date(data.scan_date) : new Date(),
           last_seen: new Date(),
-          source: 'VirusTotal'
+          source: {
+            provider: 'VirusTotal',
+            url: data.permalink || ''
+          },
+          tags: []
         }],
 
         // Metadata
@@ -412,7 +418,7 @@ export class ApiIntegrationService {
         priority: detectionRatio > 0.3 ? 'high' : 'medium',
         
         impact_assessment: {
-          scope: detectionRatio > 0.5 ? 'Widespread' : 'Limited',
+          scope: detectionRatio > 0.5 ? 'Global' : 'Limited',
           affected_systems: Math.ceil(detectionRatio * 100)
         },
 
@@ -515,7 +521,7 @@ export class ApiIntegrationService {
     return 'Low';
   }
 
-  private mapVirusTotalSophistication(detectionRatio: number): string {
+  private mapVirusTotalSophistication(detectionRatio: number): ThreatSophistication {
     if (detectionRatio > 0.8) return 'Advanced';
     if (detectionRatio > 0.5) return 'Intermediate';
     return 'Basic';
@@ -554,6 +560,7 @@ export class ApiIntegrationService {
     
     const threat: CyberThreatData = {
       id: `abuse_${ip}_${Date.now()}`,
+      type: 'CyberThreats',
       threat_id: `ABUSE-${ip.replace(/\./g, '-')}`,
       name: `Malicious IP - ${ip}`,
       description: `Reported with ${data.data.abuseConfidencePercentage}% confidence on AbuseIPDB`,
@@ -579,7 +586,11 @@ export class ApiIntegrationService {
         confidence: confidence > 0.7 ? 'High' : 'Medium',
         first_seen: new Date(data.data.lastReportedAt || Date.now()),
         last_seen: new Date(),
-        source: 'AbuseIPDB'
+        source: {
+          provider: 'AbuseIPDB',
+          url: `https://www.abuseipdb.com/check/${ip}`
+        },
+        tags: []
       }],
 
       first_seen: new Date(data.data.lastReportedAt || Date.now()),

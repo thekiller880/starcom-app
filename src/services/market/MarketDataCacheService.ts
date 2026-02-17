@@ -45,6 +45,7 @@ export class MarketDataCacheService extends EventEmitter {
   };
   private observers: CacheObserver[] = [];
   private cleanupInterval?: NodeJS.Timeout;
+  private accessCounter = 0;
 
   constructor(maxSize = 1000, defaultTTL = 30000) {
     super();
@@ -76,7 +77,7 @@ export class MarketDataCacheService extends EventEmitter {
       timestamp: now,
       ttl: entryTTL,
       accessCount: 0,
-      lastAccessed: now
+      lastAccessed: ++this.accessCounter
     };
 
     this.cache.set(key, entry);
@@ -111,7 +112,7 @@ export class MarketDataCacheService extends EventEmitter {
 
     // Update access metadata
     entry.accessCount++;
-    entry.lastAccessed = Date.now();
+    entry.lastAccessed = ++this.accessCounter;
     
     this.stats.hits++;
     this.observers.forEach(observer => observer.onHit?.(key, entry));
@@ -248,7 +249,7 @@ export class MarketDataCacheService extends EventEmitter {
    */
   private evictLRU(): void {
     let oldestKey: string | null = null;
-    let oldestTime = Date.now();
+    let oldestTime = Number.POSITIVE_INFINITY;
 
     for (const [key, entry] of this.cache) {
       if (entry.lastAccessed < oldestTime) {

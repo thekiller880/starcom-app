@@ -3,6 +3,8 @@
 import * as THREE from 'three';
 import { ScaleContext } from './types/ScaleContext';
 import type { ScaleContextConfig } from './types/ScaleContext';
+import { computeSolarEphemeris, computeSunDirectionGlobe } from './SolarEphemerisService';
+import { EarthOrientationService } from './EarthOrientationService';
 
 export interface SunConfig {
   baseRadius: number;          // Base sun radius in units
@@ -19,11 +21,16 @@ export interface SunState {
   currentPosition: THREE.Vector3;
   currentScale: ScaleContext;
   lightIntensity: number;
+  subsolarLatitudeDeg?: number;
+  subsolarLongitudeDeg?: number;
+  adjustedSubsolarLongitudeDeg?: number;
 }
 
 export type SunStateChangeCallback = (state: SunState) => void;
 
 export class SolarSunManager {
+  private static readonly EARTH_SUN_RADIUS_RATIO = 109.2;
+  private static readonly EARTH_SUN_DISTANCE_RATIO = 23455;
   private scene: THREE.Scene;
   private config: SunConfig;
   private sunMesh: THREE.Mesh | null = null;
@@ -33,6 +40,8 @@ export class SolarSunManager {
   private currentState: SunState;
   private stateChangeCallback: SunStateChangeCallback | null = null;
   private disposed: boolean = false;
+  private readonly earthOrientation = new EarthOrientationService();
+  private nowProvider: () => Date = () => new Date();
 
   // Scale-specific configurations
   private scaleConfigs: Map<ScaleContext, ScaleContextConfig> = new Map();
@@ -62,49 +71,91 @@ export class SolarSunManager {
   }
 
   private initializeScaleConfigs(): void {
+    const createCompressedScaleConfig = (
+      context: ScaleContext,
+      cameraRange: { min: number; max: number },
+      earthRadius: number,
+      sunVisible: boolean,
+      lightIntensity: number,
+      compression: number
+    ): ScaleContextConfig => {
+      if (!sunVisible) {
+        return {
+          context,
+          cameraRange,
+          earthRadius,
+          sunRadius: 0,
+          sunDistance: 0,
+          sunVisible,
+          lightIntensity
+        };
+      }
+
+      const sunRadius = earthRadius * SolarSunManager.EARTH_SUN_RADIUS_RATIO * compression;
+      const sunDistance = earthRadius * SolarSunManager.EARTH_SUN_DISTANCE_RATIO * compression;
+
+      return {
+        context,
+        cameraRange,
+        earthRadius,
+        sunRadius,
+        sunDistance,
+        sunVisible,
+        lightIntensity
+      };
+    };
+
     // EARTH_LOCAL: Sun not visible
-    this.scaleConfigs.set(ScaleContext.EARTH_LOCAL, {
-      context: ScaleContext.EARTH_LOCAL,
-      cameraRange: { min: 150, max: 1000 },
-      earthRadius: 100,
-      sunRadius: 0,
-      sunDistance: 0,
-      sunVisible: false,
-      lightIntensity: 0.3
-    });
+    this.scaleConfigs.set(
+      ScaleContext.EARTH_LOCAL,
+      createCompressedScaleConfig(
+        ScaleContext.EARTH_LOCAL,
+        { min: 150, max: 1000 },
+        100,
+        false,
+        0.3,
+        0
+      )
+    );
 
-    // EARTH_SPACE: Small distant sun
-    this.scaleConfigs.set(ScaleContext.EARTH_SPACE, {
-      context: ScaleContext.EARTH_SPACE,
-      cameraRange: { min: 200, max: 8000 },
-      earthRadius: 100,
-      sunRadius: 50,
-      sunDistance: 2000,
-      sunVisible: true,
-      lightIntensity: 0.7
-    });
+    // EARTH_SPACE: Ratio-preserving compressed sun placement for Earth-centric operations
+    this.scaleConfigs.set(
+      ScaleContext.EARTH_SPACE,
+      createCompressedScaleConfig(
+        ScaleContext.EARTH_SPACE,
+        { min: 200, max: 8000 },
+        100,
+        true,
+        0.7,
+        0.003
+      )
+    );
 
-    // INNER_SOLAR: Medium sun
-    this.scaleConfigs.set(ScaleContext.INNER_SOLAR, {
-      context: ScaleContext.INNER_SOLAR,
-      cameraRange: { min: 500, max: 15000 },
-      earthRadius: 50,
-      sunRadius: 200,
-      sunDistance: 5000,
-      sunVisible: true,
-      lightIntensity: 0.9
-    });
+    // INNER_SOLAR: Wider compression to maintain stable framing while approaching heliocentric context
+    this.scaleConfigs.set(
+      ScaleContext.INNER_SOLAR,
+      createCompressedScaleConfig(
+        ScaleContext.INNER_SOLAR,
+        { min: 500, max: 15000 },
+        50,
+        true,
+        0.9,
+        0.008
+      )
+    );
 
-    // SOLAR_SYSTEM: Large prominent sun
-    this.scaleConfigs.set(ScaleContext.SOLAR_SYSTEM, {
-      context: ScaleContext.SOLAR_SYSTEM,
-      cameraRange: { min: 1000, max: 50000 },
-      earthRadius: 20,
-      sunRadius: 800,
-      sunDistance: 15000,
-      sunVisible: true,
-      lightIntensity: 1.0
-    });
+    // SOLAR_SYSTEM: Highest compression tier, preserving Earth↔Sun size/distance ratios in-context
+    this.scaleConfigs.set(
+      ScaleContext.SOLAR_SYSTEM,
+      createCompressedScaleConfig(
+        ScaleContext.SOLAR_SYSTEM,
+        { min: 1000, max: 50000 },
+        20,
+        true,
+        1.0,
+        0.025
+      )
+    );
   }
 
   private createSun(): void {
@@ -186,10 +237,16 @@ export class SolarSunManager {
       this.sunMesh.visible = scaleConfig.sunVisible;
       
       if (scaleConfig.sunVisible) {
-        // Update position
-        const position = new THREE.Vector3(scaleConfig.sunDistance, 0, 0);
+        const now = this.nowProvider();
+        const ephemeris = computeSolarEphemeris(now);
+        const adjusted = this.earthOrientation.describe(ephemeris.subsolarLongitudeDeg);
+        const direction = computeSunDirectionGlobe(now, this.earthOrientation.getTextureLongitudeOffset());
+        const position = direction.clone().multiplyScalar(scaleConfig.sunDistance);
         this.sunMesh.position.copy(position);
         this.currentState.currentPosition.copy(position);
+        this.currentState.subsolarLatitudeDeg = ephemeris.subsolarLatitudeDeg;
+        this.currentState.subsolarLongitudeDeg = ephemeris.subsolarLongitudeDeg;
+        this.currentState.adjustedSubsolarLongitudeDeg = adjusted.adjustedSubsolarLongitudeDeg;
 
         // Update scale
         const scale = scaleConfig.sunRadius / this.config.baseRadius;
@@ -214,6 +271,9 @@ export class SolarSunManager {
         if (this.coronaMesh) {
           this.coronaMesh.visible = false;
         }
+        this.currentState.subsolarLatitudeDeg = undefined;
+        this.currentState.subsolarLongitudeDeg = undefined;
+        this.currentState.adjustedSubsolarLongitudeDeg = undefined;
       }
     }
 
@@ -257,6 +317,21 @@ export class SolarSunManager {
       // Reapply current scale
       this.updateForScale(this.currentState.currentScale);
     }
+  }
+
+  public setTextureLongitudeOffset(offsetDeg: number): void {
+    this.earthOrientation.setTextureLongitudeOffset(offsetDeg);
+    if (this.currentState.isVisible) {
+      this.updateForScale(this.currentState.currentScale);
+    }
+  }
+
+  public getTextureLongitudeOffset(): number {
+    return this.earthOrientation.getTextureLongitudeOffset();
+  }
+
+  public setNowProvider(nowProvider: () => Date): void {
+    this.nowProvider = nowProvider;
   }
 
   /**

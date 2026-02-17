@@ -1,0 +1,59 @@
+.popup {
+  width: min(520px, 92vw);
+  max-height: 82vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 196, 255, 0.35);
+  background: rgba(0, 16, 36, 0.95);
+  color: #d9f6ff;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.title {
+  margin: 0;
+  font-size: 16px;
+}
+
+.closeButton {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(0, 196, 255, 0.35);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.4);
+  color: #00c4ff;
+  cursor: pointer;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.selectorWrap {
+  display: flex;
+  justify-content: center;
+}
+
+.panelWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.placeholder {
+  border: 1px dashed rgba(0, 196, 255, 0.25);
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 12px;
+  color: rgba(217, 246, 255, 0.8);
+}

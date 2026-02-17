@@ -1,0 +1,47 @@
+{
+  "generatedAt": "2026-02-14T19:26:33.427Z",
+  "sourceDir": "/Users/jono/Documents/GitHub/starcom-app/public/geopolitical",
+  "quantizationScale": 1000000,
+  "topologyGraphHash": "33d3ef481de6f264bce71de68a9339685deb2aa4ba749e6273ecd26a3379a30e",
+  "lods": [
+    {
+      "lod": 0,
+      "sourceFile": "/Users/jono/Documents/GitHub/starcom-app/public/geopolitical/world-territories-lod0.geojson",
+      "featureCount": 242,
+      "polygonCount": 330,
+      "ringCount": 333,
+      "uniqueVertexCount": 4524,
+      "uniqueEdgeCount": 4693,
+      "sharedEdgeCount": 1616,
+      "topologyHash": "26a50dde497ab0d5f193655bf138d240329826a6911bf6d55aa20bb00a5367ba"
+    },
+    {
+      "lod": 1,
+      "sourceFile": "/Users/jono/Documents/GitHub/starcom-app/public/geopolitical/world-territories-lod1.geojson",
+      "featureCount": 242,
+      "polygonCount": 422,
+      "ringCount": 425,
+      "uniqueVertexCount": 8434,
+      "uniqueEdgeCount": 8604,
+      "sharedEdgeCount": 2745,
+      "topologyHash": "b93786631ad78789c3656f131f302753f74deb4f5231a409b5a00d4126c4df4f"
+    },
+    {
+      "lod": 2,
+      "sourceFile": "/Users/jono/Documents/GitHub/starcom-app/public/geopolitical/world-territories-lod2.geojson",
+      "featureCount": 242,
+      "polygonCount": 615,
+      "ringCount": 618,
+      "uniqueVertexCount": 16270,
+      "uniqueEdgeCount": 16444,
+      "sharedEdgeCount": 4707,
+      "topologyHash": "8e92b84d2ea1fa51214bb1b2929e4e54cbfdcb1c9f5fb1e2434bf06e3ae3d88a"
+    }
+  ],
+  "summary": {
+    "lodCount": 3,
+    "totalFeatures": 726,
+    "totalPolygons": 1367,
+    "totalRings": 1376
+  }
+}

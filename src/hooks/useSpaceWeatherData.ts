@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { fetchLatestElectricFieldData, generateSpaceWeatherAlerts } from '../services/noaaSpaceWeather';
-import { ProcessedElectricFieldData, SpaceWeatherAlert } from '../types';
+import { ProcessedElectricFieldData, SpaceWeatherAlert, NOAAElectricFieldData } from '../types';
 import { SpaceWeatherCacheService } from '../services/SpaceWeatherCacheService';
 
 // AI-NOTE: Updated to use proper caching service for better performance and data persistence
@@ -58,15 +58,23 @@ export const useSpaceWeatherData = (options: UseSpaceWeatherOptions = {}): UseSp
         }
       }
 
+      const emptyDataset = (dataset: 'InterMag' | 'US-Canada'): NOAAElectricFieldData => ({
+        time_tag: new Date().toISOString(),
+        cadence: 60,
+        product_version: dataset === 'InterMag' ? 'InterMagEarthScope' : 'US-Canada-1D',
+        type: 'FeatureCollection',
+        features: []
+      });
+
       // Fetch both datasets with graceful empty fallbacks when upstream has no files
-      const fetchWithEmptyFallback = async (dataset: 'InterMag' | 'US-Canada') => {
+      const fetchWithEmptyFallback = async (dataset: 'InterMag' | 'US-Canada'): Promise<NOAAElectricFieldData> => {
         try {
           return await fetchLatestElectricFieldData(dataset);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           if (message.includes('No electric field files found')) {
             console.warn(`Space weather: ${dataset} returned no files; using empty dataset`);
-            return { time_tag: new Date().toISOString(), features: [] } as const;
+            return emptyDataset(dataset);
           }
           throw err;
         }
@@ -76,7 +84,7 @@ export const useSpaceWeatherData = (options: UseSpaceWeatherOptions = {}): UseSp
         fetchWithEmptyFallback('InterMag'),
         fetchWithEmptyFallback('US-Canada')
       ]);
-      
+
       // Convert raw data to ProcessedElectricFieldData format
       const interMagProcessed: ProcessedElectricFieldData = {
         timestamp: interMagRaw.time_tag || new Date().toISOString(),

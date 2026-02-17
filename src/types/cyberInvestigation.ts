@@ -77,6 +77,8 @@ export interface CyberTeam {
   name: string;
   type: 'INCIDENT_RESPONSE' | 'THREAT_HUNTING' | 'FORENSICS' | 'SOC' | 'RED_TEAM' | 'BLUE_TEAM';
   agency: 'SOCOM' | 'SPACE_FORCE' | 'CYBER_COMMAND' | 'NSA' | 'DIA' | 'CIA';
+  clearanceLevel?: 'UNCLASSIFIED' | 'CONFIDENTIAL' | 'SECRET' | 'TOP_SECRET';
+  description?: string;
   
   // Team members
   lead: string; // wallet address
@@ -106,6 +108,7 @@ export interface TeamMember {
   status: 'ONLINE' | 'AWAY' | 'BUSY' | 'OFFLINE';
   joinedAt: Date;
   lastActivity: Date;
+  clearanceLevel?: 'UNCLASSIFIED' | 'CONFIDENTIAL' | 'SECRET' | 'TOP_SECRET';
 }
 
 export interface CyberInvestigation {

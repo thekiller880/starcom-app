@@ -38,8 +38,8 @@ export interface GraphNode {
  */
 export interface GraphLink {
   id: string;
-  source: string; // Source node ID
-  target: string; // Target node ID
+  source: string | GraphNode; // Source node ID or object
+  target: string | GraphNode; // Target node ID or object
   type: string; // Link type
   label?: string; // Link label
   value?: number; // Link strength/value (default: 1)
@@ -489,6 +489,3 @@ class GraphService {
 
 // Create singleton instance
 export const graphService = new GraphService();
-
-// Export types
-export type { GraphData, GraphNode, GraphLink, ExpansionOptions };

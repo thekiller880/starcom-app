@@ -8,8 +8,7 @@
 import { 
   BaseEntity,
   IntelEntity,
-  NodeEntity,
-  ClassificationLevel
+  NodeEntity
 } from '../types/intelDataModels';
 import { 
   Intel, 
@@ -34,7 +33,6 @@ export interface EnhancedIntelEntity extends IntelEntity {
   // Original properties preserved
   title: string;
   description: string;
-  classification: ClassificationLevel;
   source: string;
   verified: boolean;
   confidence: number;
@@ -93,7 +91,6 @@ export class IntelBridgeAdapter {
       // IntelEntity properties
       title,
       description,
-      classification: this.mapToClassificationLevel(intel.classification),
       source: intel.source,
       sourceUrl: undefined, // Could be enhanced with source URL if available
       verified: intel.verified || false,
@@ -160,7 +157,6 @@ export class IntelBridgeAdapter {
     return {
       id: entity.metadata?.originalIntelId || entity.id.replace('entity-', ''),
       source: entity.source as any, // Type conversion needed
-      classification: entity.classification as any, // Type conversion needed
       reliability: entity.reliability || 'C',
       timestamp: new Date(entity.createdAt).getTime(),
       collectedBy: entity.createdBy,
@@ -296,18 +292,6 @@ export class IntelBridgeAdapter {
     };
     
     return reliabilityMap[reliability] || 50;
-  }
-  
-  private static mapToClassificationLevel(classification: any): ClassificationLevel {
-    // Map from new architecture classification to existing system
-    const classificationMap: Record<string, ClassificationLevel> = {
-      'UNCLASS': 'UNCLASSIFIED',
-      'CONFIDENTIAL': 'CONFIDENTIAL',
-      'SECRET': 'SECRET',
-      'TOP_SECRET': 'TOP_SECRET'
-    };
-    
-    return classificationMap[classification] || 'UNCLASSIFIED';
   }
   
   private static getReliabilityDescription(reliability: ReliabilityRating): string {

@@ -9,6 +9,12 @@ export class Planet {
   private mesh: THREE.Mesh | null = null;
   private atmosphereMesh: THREE.Mesh | null = null;
   private orbitalPath: THREE.Line | null = null;
+  private moonMesh: THREE.Mesh | null = null;
+  private moonOrbitalPath: THREE.Line | null = null;
+  private moonData: PlanetInstance['moons'][number] | null = null;
+  private moonVisible: boolean = false;
+  private moonOrbitalPathVisible: boolean = false;
+  private moonInitialPhase: number = Math.random() * Math.PI * 2;
   private orbitalGroup: THREE.Group = new THREE.Group();
   
   // State tracking
@@ -85,6 +91,54 @@ export class Planet {
     if (this.planetData.hasAtmosphere) {
       this.createAtmosphere(visualRadius);
     }
+
+    if (this.planetData.moons && this.planetData.moons.length > 0) {
+      this.createPrimaryMoon(visualRadius);
+    }
+  }
+
+  private createPrimaryMoon(planetVisualRadius: number): void {
+    const primaryMoon = this.planetData.moons?.[0];
+    if (!primaryMoon) return;
+
+    this.moonData = primaryMoon;
+
+    const kmPerSceneUnit = this.planetData.radius / Math.max(1e-6, planetVisualRadius);
+    const moonRadiusUnits = primaryMoon.radius / kmPerSceneUnit;
+    const moonOrbitRadiusUnits = primaryMoon.orbitRadius / kmPerSceneUnit;
+
+    const moonGeometry = new THREE.SphereGeometry(Math.max(1.2, moonRadiusUnits), 24, 24);
+    const moonMaterial = new THREE.MeshLambertMaterial({
+      color: primaryMoon.color,
+      transparent: false
+    });
+
+    this.moonMesh = new THREE.Mesh(moonGeometry, moonMaterial);
+    this.moonMesh.visible = false;
+    this.moonMesh.position.set(moonOrbitRadiusUnits, 0, 0);
+    this.orbitalGroup.add(this.moonMesh);
+
+    const points: THREE.Vector3[] = [];
+    const segments = 96;
+    for (let i = 0; i <= segments; i++) {
+      const angle = (i / segments) * Math.PI * 2;
+      points.push(new THREE.Vector3(
+        Math.cos(angle) * moonOrbitRadiusUnits,
+        0,
+        Math.sin(angle) * moonOrbitRadiusUnits
+      ));
+    }
+
+    const pathGeometry = new THREE.BufferGeometry().setFromPoints(points);
+    const pathMaterial = new THREE.LineBasicMaterial({
+      color: primaryMoon.color,
+      transparent: true,
+      opacity: 0.25
+    });
+
+    this.moonOrbitalPath = new THREE.Line(pathGeometry, pathMaterial);
+    this.moonOrbitalPath.visible = false;
+    this.orbitalGroup.add(this.moonOrbitalPath);
   }
 
   private createAtmosphere(planetRadius: number): void {
@@ -175,6 +229,22 @@ export class Planet {
     if (this.atmosphereMesh) {
       this.atmosphereMesh.position.copy(this.state.position);
     }
+
+    this.updateMoonPosition(daysSinceEpoch);
+  }
+
+  private updateMoonPosition(daysSinceEpoch: number): void {
+    if (!this.moonMesh || !this.moonData || this.disposed) return;
+
+    const planetVisualRadius = this.getVisualRadius();
+    const kmPerSceneUnit = this.planetData.radius / Math.max(1e-6, planetVisualRadius);
+    const moonOrbitRadiusUnits = this.moonData.orbitRadius / kmPerSceneUnit;
+
+    const phase = ((daysSinceEpoch / this.moonData.orbitPeriod) * Math.PI * 2) + this.moonInitialPhase;
+    const x = Math.cos(phase) * moonOrbitRadiusUnits;
+    const z = Math.sin(phase) * moonOrbitRadiusUnits;
+
+    this.moonMesh.position.set(x, 0, z);
   }
 
   /**
@@ -190,6 +260,14 @@ export class Planet {
     if (this.atmosphereMesh) {
       this.atmosphereMesh.visible = visible && this.planetData.hasAtmosphere;
     }
+
+    if (this.moonMesh) {
+      this.moonMesh.visible = visible && this.moonVisible;
+    }
+
+    if (this.moonOrbitalPath) {
+      this.moonOrbitalPath.visible = visible && this.moonVisible && this.moonOrbitalPathVisible;
+    }
   }
 
   /**
@@ -199,6 +277,38 @@ export class Planet {
     if (this.orbitalPath) {
       this.orbitalPath.visible = visible;
     }
+
+    if (this.moonOrbitalPath) {
+      this.moonOrbitalPathVisible = visible;
+      this.moonOrbitalPath.visible = visible && this.moonVisible && this.state.isVisible;
+    }
+  }
+
+  public setMoonVisible(visible: boolean): void {
+    this.moonVisible = visible;
+
+    if (this.moonMesh) {
+      this.moonMesh.visible = visible && this.state.isVisible;
+    }
+
+    if (this.moonOrbitalPath) {
+      this.moonOrbitalPath.visible = visible && this.state.isVisible && this.moonOrbitalPathVisible;
+    }
+  }
+
+  public isMoonVisible(): boolean {
+    return Boolean(this.moonMesh && this.moonMesh.visible);
+  }
+
+  public hasMoons(): boolean {
+    return Boolean(this.moonData);
+  }
+
+  public getMoonPosition(): THREE.Vector3 | null {
+    if (!this.moonMesh) return null;
+    const worldPosition = new THREE.Vector3();
+    this.moonMesh.getWorldPosition(worldPosition);
+    return worldPosition;
   }
 
   /**
@@ -310,6 +420,20 @@ export class Planet {
       this.atmosphereMesh.geometry.dispose();
       if (this.atmosphereMesh.material instanceof THREE.Material) {
         this.atmosphereMesh.material.dispose();
+      }
+    }
+
+    if (this.moonOrbitalPath) {
+      this.moonOrbitalPath.geometry.dispose();
+      if (this.moonOrbitalPath.material instanceof THREE.Material) {
+        this.moonOrbitalPath.material.dispose();
+      }
+    }
+
+    if (this.moonMesh) {
+      this.moonMesh.geometry.dispose();
+      if (this.moonMesh.material instanceof THREE.Material) {
+        this.moonMesh.material.dispose();
       }
     }
 

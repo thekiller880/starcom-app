@@ -1,7 +1,7 @@
 .supportButton {
   position: fixed;
-  right: 20px;
-  bottom: 20px;
+  right: calc(32px + 16px);
+  bottom: calc(5vh + 12px);
   z-index: 1001;
   display: inline-flex;
   align-items: center;
@@ -64,8 +64,8 @@
 
 @media (max-width: 640px) {
   .supportButton {
-    right: 14px;
-    bottom: 14px;
+    right: calc(28px + 10px);
+    bottom: calc(5vh + 8px);
     padding: 0.8rem 0.95rem;
   }
   .label {

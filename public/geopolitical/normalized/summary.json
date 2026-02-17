@@ -2,7 +2,7 @@
   "lods": {
     "lod0": {
       "countsPerClass": {
-        "International": 332,
+        "International": 331,
         "Disputed": 21,
         "LineOfControl": 7,
         "Indefinite": 5,
@@ -12,12 +12,12 @@
         "Unknown": 0
       },
       "unknownPct": 0,
-      "total": 365,
-      "hash": "d1ee16ec801bf18a791fcee991cf19d5c833b44050561c8346f39d33092d67b7"
+      "total": 364,
+      "hash": "ed6f205bc08508a9633393f0e803aea74152ba370eda63aacebfac207f18f195"
     },
     "lod1": {
       "countsPerClass": {
-        "International": 332,
+        "International": 331,
         "Disputed": 21,
         "LineOfControl": 7,
         "Indefinite": 5,
@@ -27,12 +27,12 @@
         "Unknown": 0
       },
       "unknownPct": 0,
-      "total": 365,
-      "hash": "00275cbadfa6ed27d1b4d2be0b76fc1b4567c79ac05a0ff995ca149f9f73dae5"
+      "total": 364,
+      "hash": "4882d7a6e21ec502c56934c2e7d3ccd2493b1a38ee7b9029b6b76bbb4079d15b"
     },
     "lod2": {
       "countsPerClass": {
-        "International": 332,
+        "International": 331,
         "Disputed": 21,
         "LineOfControl": 7,
         "Indefinite": 5,
@@ -42,8 +42,8 @@
         "Unknown": 0
       },
       "unknownPct": 0,
-      "total": 365,
-      "hash": "f1891e22b1b7e36faf784ff612018006a11a72e3bbe61424d75e1bffa3d13ce3"
+      "total": 364,
+      "hash": "8fa78aaf7c0549a1ee10411fb0cd361dd2be3e94a90d8897f16a55c37560cdb4"
     }
   }
 }

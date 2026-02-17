@@ -36,7 +36,7 @@ import {
 // Advanced Cybersecurity Imports
 import { pqCryptoService } from './crypto/SOCOMPQCryptoService';
 // Nostr Integration for Secure Messaging
-import NostrService, { NostrMessage, NostrTeamChannel } from './nostrService';
+import { NostrService, NostrMessage, NostrTeamChannel } from './nostrService';
 
 // Advanced Security Interfaces for Collaboration
 interface CollaborationSecurityMetadata {
@@ -49,7 +49,6 @@ interface CollaborationSecurityMetadata {
     algorithm: string;
   };
   securityLevel: 'QUANTUM_SAFE' | 'CLASSICAL' | 'HYBRID';
-  classificationLevel: 'UNCLASSIFIED' | 'CONFIDENTIAL' | 'SECRET' | 'TOP_SECRET' | 'SCI';
   auditTrail: CollaborationSecurityEvent[];
   participantDIDs: string[];
   encryptedChannels: string[];
@@ -99,7 +98,6 @@ const COLLABORATION_SECURITY_CONFIG = {
   ZERO_TRUST_VALIDATION: true,
   QUANTUM_SAFE_CHANNELS: true,
   AUTO_KEY_ROTATION: true,
-  CLEARANCE_VERIFICATION: true,
   AUDIT_ALL_INTERACTIONS: true,
   COMPLIANCE_STANDARDS: ['NIST-CSF-2.0', 'STIG', 'CNSA-2.0', 'SOCOM-CYBER']
 };
@@ -223,7 +221,7 @@ class CollaborationService {
     _senderId: string, // Marked as unused but kept for API compatibility
     content: string,
     messageType: 'text' | 'intelligence' | 'alert' | 'status' = 'text'
-  ): Promise<NostrMessage> {
+  ): Promise<boolean> {
     try {
       if (!this.nostrService) {
         throw new Error('Nostr service not initialized');
@@ -234,23 +232,20 @@ class CollaborationService {
         throw new Error(`Nostr channel ${channelId} not found`);
       }
       
-      const message = await this.nostrService.sendMessage(
+      const success = await this.nostrService.sendMessage(
         channelId,
         content,
         messageType
       );
-      
-      if (message) {
-        // Add to local message queue
-        const channelMessages = this.nostrMessageQueue.get(channelId) || [];
-        channelMessages.push(message);
-        this.nostrMessageQueue.set(channelId, channelMessages);
-        
-        console.log(`📡 Nostr message sent to channel ${channelId}`);
-        return message;
-      } else {
+
+      if (!success) {
         throw new Error('Failed to send message');
       }
+
+      const channelMessages = this.nostrService.getChannelMessages(channelId);
+      this.nostrMessageQueue.set(channelId, channelMessages);
+      console.log(`📡 Nostr message sent to channel ${channelId}`);
+      return true;
     } catch (error) {
       console.error(`❌ Failed to send Nostr message to channel ${channelId}:`, error);
       throw error;
@@ -290,8 +285,7 @@ class CollaborationService {
   async sendMessage(
     sessionId: string,
     senderId: string,
-    content: string,
-    classification: string = 'UNCLASSIFIED'
+    content: string
   ): Promise<CollaborationMessage> {
     try {
       const session = this.secureSessionRegistry.get(sessionId);
@@ -320,14 +314,12 @@ class CollaborationService {
         content: encryptedContent,
         timestamp: new Date(),
         type: 'TEXT',
-        classification,
         attachments: [{
           id: `attachment-${Date.now()}`,
           name: 'Security Metadata',
           type: 'FILE',
           url: `#metadata-${otkId}`,
           size: 256,
-          classification,
           encryptionStatus: {
             algorithm: 'HYBRID_PQC',
             keyId: otkId,
@@ -352,7 +344,6 @@ class CollaborationService {
         userDID: senderId,
         details: {
           messageId: message.id,
-          classification,
           encrypted: true,
           otkUsed: otkId
         },
@@ -362,7 +353,6 @@ class CollaborationService {
       console.log('🔐 Secure message sent:', {
         messageId: message.id,
         sessionId,
-        classification,
         encrypted: true
       });
       
@@ -377,8 +367,7 @@ class CollaborationService {
   // Helper Methods for Advanced Security
   private async _performCollaborationSecurityProcessing(
     sessionId: string,
-    creatorDID: string,
-    classification: string
+    creatorDID: string
   ): Promise<CollaborationSecurityMetadata> {
     const auditTrail: CollaborationSecurityEvent[] = [];
     
@@ -405,7 +394,6 @@ class CollaborationService {
         otkUsed,
         tssSignature,
         securityLevel: 'QUANTUM_SAFE',
-        classificationLevel: this.mapClassificationLevel(classification),
         auditTrail,
         participantDIDs: [creatorDID],
         encryptedChannels: []
@@ -417,7 +405,6 @@ class CollaborationService {
         pqcEncrypted: false,
         didVerified: false,
         securityLevel: 'CLASSICAL',
-        classificationLevel: 'UNCLASSIFIED',
         auditTrail,
         participantDIDs: [],
         encryptedChannels: []
@@ -452,24 +439,15 @@ class CollaborationService {
   }
 
   // Reserved for future DID integration
-  private async _createDIDCollaborator(did: string, clearanceLevel: ClearanceLevel): Promise<DIDCollaborator> {
+  private async _createDIDCollaborator(did: string): Promise<DIDCollaborator> {
     return {
       did,
       publicKey: `pub-${did.slice(-8)}`,
       credentials: ['collaboration-verified', 'quantum-safe'],
-      clearanceLevel,
       agency: 'CYBER_COMMAND',
       verificationStatus: 'VERIFIED',
       lastActivity: Date.now()
     };
-  }
-
-  // Reserved for future clearance validation
-  private _validateClearanceLevel(userLevel: string, requiredLevel: string): boolean {
-    const levels = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET', 'SCI'];
-    const userIndex = levels.indexOf(userLevel);
-    const requiredIndex = levels.indexOf(requiredLevel);
-    return userIndex >= requiredIndex;
   }
 
   // Reserved for future quantum channel access control
@@ -527,17 +505,6 @@ class CollaborationService {
     // Security events are now stored in audit log only
   }
 
-  private mapClassificationLevel(level: string): CollaborationSecurityMetadata['classificationLevel'] {
-    const mapping: Record<string, CollaborationSecurityMetadata['classificationLevel']> = {
-      'UNCLASSIFIED': 'UNCLASSIFIED',
-      'CONFIDENTIAL': 'CONFIDENTIAL',
-      'SECRET': 'SECRET',
-      'TOP_SECRET': 'TOP_SECRET',
-      'SCI': 'SCI'
-    };
-    return mapping[level] || 'UNCLASSIFIED';
-  }
-
   /**
    * Get comprehensive security status for collaboration service
    */
@@ -548,13 +515,13 @@ class CollaborationService {
     securityEvents: number;
     complianceLevel: string;
   } {
-    return {
-      activeSecureSessions: this.secureSessionRegistry.size,
-      quantumChannels: this.quantumChannels.size,
-      verifiedCollaborators: this.didCollaborators.size,
-      securityEvents: this.securityAuditLog.length,
-      complianceLevel: COLLABORATION_SECURITY_CONFIG.COMPLIANCE_STANDARDS.join(', ')
-    };
+      return {
+        activeSecureSessions: this.secureSessionRegistry.size,
+        quantumChannels: this.quantumChannels.size,
+        verifiedCollaborators: this.didCollaborators.size,
+        securityEvents: this.securityAuditLog.length,
+        complianceLevel: COLLABORATION_SECURITY_CONFIG.COMPLIANCE_STANDARDS.join(', ')
+      };
   }
 
   private initializeMockData(): void {
@@ -567,7 +534,6 @@ class CollaborationService {
   private generateMockOperators(): void {
     const agencies: AgencyType[] = ['SOCOM', 'SPACE_FORCE', 'CYBER_COMMAND', 'NSA', 'DIA'];
     const roles: CollaborationRole[] = ['LEAD_ANALYST', 'SUPPORT_ANALYST', 'OBSERVER', 'COORDINATOR'];
-    const clearanceLevels: string[] = ['SECRET', 'TOP_SECRET', 'SCI'];
     
     const names = [
       'Agent Rodriguez', 'Colonel Chen', 'Dr. Patel', 'Major Williams',
@@ -579,7 +545,6 @@ class CollaborationService {
       name,
       agency: agencies[index % agencies.length],
       role: roles[index % roles.length],
-      clearanceLevel: clearanceLevels[index % clearanceLevels.length],
       specializations: this.getRandomSpecializations(),
       status: Math.random() > 0.3 ? 'ONLINE' : 'AWAY',
       lastActivity: new Date(Date.now() - Math.random() * 3600000) // Random within last hour
@@ -602,20 +567,17 @@ class CollaborationService {
       {
         name: 'Operation Cyber Shield',
         description: 'Joint cyber threat investigation across multiple attack vectors',
-        leadAgency: 'CYBER_COMMAND' as AgencyType,
-        classification: 'SECRET'
+        leadAgency: 'CYBER_COMMAND' as AgencyType
       },
       {
         name: 'Space Asset Protection Alpha',
         description: 'Monitoring and protection of critical orbital infrastructure',
-        leadAgency: 'SPACE_FORCE' as AgencyType,
-        classification: 'TOP_SECRET'
+        leadAgency: 'SPACE_FORCE' as AgencyType
       },
       {
         name: 'Global Network Analysis',
         description: 'Comprehensive analysis of adversary communication networks',
-        leadAgency: 'NSA' as AgencyType,
-        classification: 'SCI'
+        leadAgency: 'NSA' as AgencyType
       }
     ];
 
@@ -650,8 +612,7 @@ class CollaborationService {
           canView: this.mockOperators.slice(0, 3).map(op => op.id),
           canEdit: [this.mockOperators[0].id, this.mockOperators[1].id],
           canShare: [this.mockOperators[0].id],
-          canAnnotate: this.mockOperators.slice(0, 3).map(op => op.id),
-          clearanceRequired: 'SECRET'
+          canAnnotate: this.mockOperators.slice(0, 3).map(op => op.id)
         },
         encryptionStatus: this.generateMockEncryption(),
         lastSynchronized: new Date(),
@@ -667,7 +628,6 @@ class CollaborationService {
         name: 'Main Operations Channel',
         type: 'TEXT',
         participants: this.mockOperators.slice(0, 3).map(op => op.id),
-        classification: 'SECRET',
         encryptionType: 'PQC',
         isActive: true,
         messageHistory: []
@@ -677,7 +637,6 @@ class CollaborationService {
         name: 'Secure Voice Relay',
         type: 'VOICE',
         participants: this.mockOperators.slice(0, 2).map(op => op.id),
-        classification: 'TOP_SECRET',
         encryptionType: 'PQC',
         isActive: Math.random() > 0.5,
         messageHistory: []
@@ -700,7 +659,6 @@ class CollaborationService {
         content: this.getRandomAnnotationContent(),
         position: this.getRandomAnnotationPosition(),
         type: annotationTypes[Math.floor(Math.random() * annotationTypes.length)],
-        classification: 'SECRET',
         createdAt: new Date(Date.now() - Math.random() * 3600000),
         responses: []
       });
@@ -786,7 +744,6 @@ class CollaborationService {
       category: template.category,
       sourceAgency: this.mockOperators[index % this.mockOperators.length].agency,
       creatorId: this.mockOperators[index % this.mockOperators.length].id,
-      classification: index % 2 === 0 ? 'SECRET' : 'TOP_SECRET',
       trustScore: Math.random() * 40 + 60, // 60-100
       validationStatus: 'VERIFIED' as const,
       metadata: {
@@ -804,7 +761,6 @@ class CollaborationService {
         }
       },
       accessRequirements: [
-        { type: 'CLEARANCE', value: 'SECRET', description: 'Secret clearance required' },
         { type: 'TOKEN_BALANCE', value: Math.floor(Math.random() * 100) + 10, description: 'Minimum token balance' }
       ],
       pricing: {
@@ -877,14 +833,12 @@ class CollaborationService {
         content,
         type: index % 3 === 0 ? 'INTELLIGENCE_SHARE' : 'TEXT',
         timestamp: new Date(Date.now() - Math.random() * 3600000),
-        classification: 'SECRET',
         attachments: index % 4 === 0 ? [{
           id: `attachment-${index + 1}`,
           name: `Analysis_Report_${index + 1}.pdf`,
           type: 'ANALYSIS_REPORT',
           url: `/attachments/report-${index + 1}.pdf`,
           size: Math.floor(Math.random() * 10) + 1, // 1-10 MB
-          classification: 'SECRET',
           encryptionStatus: this.generateMockEncryption()
         }] : undefined,
         linkedContexts: index % 3 === 0 ? [`context-1-1`] : undefined
@@ -909,7 +863,6 @@ class CollaborationService {
       id: `session-${Date.now()}`,
       name: sessionData.name || 'New Collaboration Session',
       description: sessionData.description || '',
-      classification: sessionData.classification || 'SECRET',
       leadAgency: sessionData.leadAgency || 'CYBER_COMMAND',
       participants: sessionData.participants || [this.mockOperators[0]],
       invitedOperators: sessionData.invitedOperators || [],
@@ -991,10 +944,6 @@ class CollaborationService {
       results = results.filter(asset => filters.categories!.includes(asset.category));
     }
     
-    if (filters?.clearanceLevels?.length) {
-      results = results.filter(asset => filters.clearanceLevels!.includes(asset.classification));
-    }
-    
     if (filters?.trustScoreMin !== undefined) {
       results = results.filter(asset => asset.trustScore >= filters.trustScoreMin!);
     }
@@ -1052,16 +1001,15 @@ class CollaborationService {
     console.log(`Fetching invitations for operator ${operatorId}`);
     
     // Generate mock invitations
+    const inviter = this.mockOperators[0];
     return [
       {
         id: 'invite-1',
         sessionId: 'session-4',
-        sessionName: 'Emergency Cyber Response',
-        invitedBy: this.mockOperators[0].id,
-        invitedByName: this.mockOperators[0].name,
-        invitedByAgency: this.mockOperators[0].agency,
-        role: 'SUPPORT_ANALYST',
+        inviterId: inviter.id,
+        inviteeId: operatorId,
         message: 'Your expertise in network forensics is needed for this critical operation.',
+        createdAt: new Date(),
         expiresAt: new Date(Date.now() + 86400000), // Expires in 24 hours
         status: 'PENDING'
       }
@@ -1081,7 +1029,6 @@ class CollaborationService {
         certificateId: `cert-${Math.random().toString(36).substr(2, 9)}`,
         issuingAuthority: 'DoD PKI',
         operatorId: 'operator-1',
-        clearanceLevel: 'SECRET',
         agency: 'CYBER_COMMAND',
         validFrom: new Date(Date.now() - 86400000 * 30), // Valid from 30 days ago
         validTo: new Date(Date.now() + 86400000 * 365), // Valid for 1 year
@@ -1100,7 +1047,7 @@ class CollaborationService {
     
     const notificationTemplates = [
       {
-        type: 'SESSION_INVITE' as const,
+        type: 'INVITATION' as const,
         title: 'New Collaboration Session Invitation',
         message: 'You have been invited to join "Operation Cyber Shield"',
         actionRequired: true,
@@ -1113,14 +1060,14 @@ class CollaborationService {
         actionRequired: false
       },
       {
-        type: 'INTELLIGENCE_AVAILABLE' as const,
+        type: 'ASSET_SHARED' as const,
         title: 'New Intelligence Asset Available',
         message: 'High-priority threat indicators published to marketplace',
         actionRequired: true,
         actionUrl: '/collaboration/marketplace'
       },
       {
-        type: 'CONTEXT_SHARE' as const,
+        type: 'SESSION_UPDATE' as const,
         title: 'Shared Analysis Context',
         message: 'Dr. Patel shared a context snapshot from ongoing investigation',
         actionRequired: false
@@ -1129,13 +1076,11 @@ class CollaborationService {
 
     return notificationTemplates.map((template, index) => ({
       id: `notification-${index + 1}`,
-      ...template,
-      senderId: this.mockOperators[index % this.mockOperators.length].id,
-      senderName: this.mockOperators[index % this.mockOperators.length].name,
-      senderAgency: this.mockOperators[index % this.mockOperators.length].agency,
-      timestamp: new Date(Date.now() - Math.random() * 3600000),
+      recipientId: operatorId,
+      relatedEntityId: `entity-${index + 1}`,
+      createdAt: new Date(Date.now() - Math.random() * 3600000),
       isRead: Math.random() > 0.6, // 40% unread
-      classification: 'SECRET'
+      ...template
     }));
   }
 

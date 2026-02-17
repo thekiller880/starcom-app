@@ -1,9 +1,11 @@
 // IntelReportUI - UI-facing representation of an Intelligence Report
 // Bridges existing IntelDashboard component and the richer IntelWorkspace types.
 // Dates are concrete Date objects in UI layer; persistence adapters serialize to ISO strings.
+import type { IntelItemClassification } from './IntelItemUI';
 
 export type IntelReportStatus = 'DRAFT' | 'SUBMITTED' | 'REVIEWED' | 'APPROVED' | 'ARCHIVED';
 export type IntelReportPriority = 'ROUTINE' | 'PRIORITY' | 'IMMEDIATE';
+export type IntelReportClassification = IntelItemClassification;
 
 export interface IntelReportHistoryEntry {
   timestamp: string; // ISO
@@ -22,6 +24,7 @@ export interface IntelReportUI {
   author: string;
   category: string; // single primary category (mapped to metadata.categories[0])
   tags: string[];
+  classification: IntelReportClassification;
   latitude?: number;
   longitude?: number;
   createdAt: Date;
@@ -53,6 +56,7 @@ export interface CreateIntelReportInput {
   latitude?: number;
   longitude?: number;
   status?: IntelReportStatus; // optional (defaults to DRAFT)
+  classification?: IntelReportClassification; // optional for legacy callers; defaults to UNCLASSIFIED
   conclusions?: string[];
   recommendations?: string[];
   methodology?: string[];

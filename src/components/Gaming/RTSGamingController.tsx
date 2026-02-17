@@ -60,27 +60,41 @@ export const RTSGamingController: React.FC<RTSGamingControllerProps> = ({
     if (!enableHolographicEffects || !rtsEnhancementsEnabled) return;
 
     const panels = document.querySelectorAll('.holo-panel, .adaptive-panel');
+    const cleanupHandlers: Array<() => void> = [];
     
     panels.forEach(panel => {
       // Add holographic scanning effect
-      const scanOverlay = document.createElement('div');
-      scanOverlay.className = 'holo-scan-overlay';
-      panel.appendChild(scanOverlay);
+      if (!panel.querySelector('.holo-scan-overlay')) {
+        const scanOverlay = document.createElement('div');
+        scanOverlay.className = 'holo-scan-overlay';
+        panel.appendChild(scanOverlay);
+      }
       
       // Add interactive glow effects
-      panel.addEventListener('mouseenter', (e) => {
+      const mouseEnterHandler = (e: Event) => {
         (e.target as HTMLElement).classList.add('holo-active');
         trackInteraction({
           type: 'hover',
           element: panel.className,
           timestamp: Date.now()
         });
-      });
+      };
       
-      panel.addEventListener('mouseleave', (e) => {
+      const mouseLeaveHandler = (e: Event) => {
         (e.target as HTMLElement).classList.remove('holo-active');
+      };
+
+      panel.addEventListener('mouseenter', mouseEnterHandler);
+      panel.addEventListener('mouseleave', mouseLeaveHandler);
+      cleanupHandlers.push(() => {
+        panel.removeEventListener('mouseenter', mouseEnterHandler);
+        panel.removeEventListener('mouseleave', mouseLeaveHandler);
       });
     });
+
+    return () => {
+      cleanupHandlers.forEach(cleanup => cleanup());
+    };
   }, [enableHolographicEffects, rtsEnhancementsEnabled, trackInteraction]);
 
   // ============================================================================
@@ -100,8 +114,9 @@ export const RTSGamingController: React.FC<RTSGamingControllerProps> = ({
 
     // Command execution animations
     const buttons = document.querySelectorAll('.rts-button');
+    const cleanupHandlers: Array<() => void> = [];
     buttons.forEach(button => {
-      button.addEventListener('click', (e) => {
+      const clickHandler = (e: Event) => {
         const ripple = document.createElement('span');
         ripple.className = 'rts-ripple-effect';
         (e.target as HTMLElement).appendChild(ripple);
@@ -113,8 +128,17 @@ export const RTSGamingController: React.FC<RTSGamingControllerProps> = ({
           element: (e.target as HTMLElement).textContent || 'unknown',
           timestamp: Date.now()
         });
+      };
+
+      button.addEventListener('click', clickHandler);
+      cleanupHandlers.push(() => {
+        button.removeEventListener('click', clickHandler);
       });
     });
+
+    return () => {
+      cleanupHandlers.forEach(cleanup => cleanup());
+    };
   }, [enableAnimations, rtsEnhancementsEnabled, trackInteraction]);
 
   // ============================================================================
@@ -270,8 +294,8 @@ export const RTSGamingController: React.FC<RTSGamingControllerProps> = ({
     if (!rtsEnhancementsEnabled) return;
 
     // Initialize all gaming enhancements
-    initializeHolographicEffects();
-    initializeCommandCenterAnimations();
+    const holographicCleanup = initializeHolographicEffects();
+    const animationCleanup = initializeCommandCenterAnimations();
     applyRoleBasedGamingTheme();
     const soundCleanup = initializeSoundEffects();
     enhanceProgressiveDisclosure();
@@ -296,14 +320,8 @@ export const RTSGamingController: React.FC<RTSGamingControllerProps> = ({
       }
       
       soundCleanup?.();
-
-      // Remove gaming event listeners
-      const elements = document.querySelectorAll('.holo-panel, .rts-button');
-      elements.forEach(element => {
-        element.removeEventListener('mouseenter', () => {});
-        element.removeEventListener('mouseleave', () => {});
-        element.removeEventListener('click', () => {});
-      });
+      holographicCleanup?.();
+      animationCleanup?.();
     };
   }, [
     rtsEnhancementsEnabled,

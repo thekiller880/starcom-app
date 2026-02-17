@@ -35,6 +35,7 @@ export const useEnhancedEIAData = (
 ): UseEnhancedEIADataReturn => {
   const serviceRef = useRef<EnhancedEIAService>(EnhancedEIAService.getInstance());
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isFetchingRef = useRef(false);
   
   // Merge options with defaults only once
   const { 
@@ -90,6 +91,7 @@ export const useEnhancedEIAData = (
   const [loading, setLoading] = useState(false); // Changed to false - we don't show global loading
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState(0);
+  const lastUpdatedRef = useRef(0);
   
   // Enhanced state tracking
   const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({});
@@ -106,8 +108,17 @@ export const useEnhancedEIAData = (
     return criticalFields.some(field => data[field as keyof EnhancedEIAData] !== null);
   }, [data]);
 
+  useEffect(() => {
+    lastUpdatedRef.current = lastUpdated;
+  }, [lastUpdated]);
+
   // Core data fetching function with progressive loading
   const fetchData = useCallback(async () => {
+    if (isFetchingRef.current) {
+      return;
+    }
+
+    isFetchingRef.current = true;
     setError(null);
     
     try {
@@ -120,39 +131,50 @@ export const useEnhancedEIAData = (
       
       // Set loading states for critical data points
       const criticalFields = ['oilPrice', 'naturalGasPrice', 'electricityGeneration', 'energySecurity', 'powerGrid'];
-      criticalFields.forEach(field => {
-        setLoadingStates(prev => ({ ...prev, [field]: true }));
-      });
+      setLoadingStates(prev => ({
+        ...prev,
+        ...Object.fromEntries(criticalFields.map(field => [field, true]))
+      }));
       
       // Start with critical data first for immediate display
       try {
         const criticalData = await service.getCriticalData();
         if (criticalData && Object.keys(criticalData).length > 0) {
           setData(prev => ({ ...prev, ...criticalData }));
-          
-          // Update loading and availability states for critical data
+
+          const criticalAvailabilityUpdates: Record<string, boolean> = {};
+          const criticalLoadingUpdates: Record<string, boolean> = {};
           Object.keys(criticalData).forEach(key => {
             if (criticalData[key as keyof typeof criticalData] !== null) {
-              setDataAvailability(prev => ({ ...prev, [key]: true }));
-              setLoadingStates(prev => ({ ...prev, [key]: false }));
+              criticalAvailabilityUpdates[key] = true;
             }
+            criticalLoadingUpdates[key] = false;
           });
+
+          if (Object.keys(criticalAvailabilityUpdates).length > 0) {
+            setDataAvailability(prev => ({ ...prev, ...criticalAvailabilityUpdates }));
+          }
+          if (Object.keys(criticalLoadingUpdates).length > 0) {
+            setLoadingStates(prev => ({ ...prev, ...criticalLoadingUpdates }));
+          }
           
           setLastUpdated(Date.now());
         }
       } catch (criticalError) {
         console.warn('Critical data fetch failed, continuing with full fetch:', criticalError);
         // Clear loading states for failed critical data
-        criticalFields.forEach(field => {
-          setLoadingStates(prev => ({ ...prev, [field]: false }));
-        });
+        setLoadingStates(prev => ({
+          ...prev,
+          ...Object.fromEntries(criticalFields.map(field => [field, false]))
+        }));
       }
       
       // Set loading states for all other data points
       const allFields = ['renewables', 'marketIntelligence', 'supplyChain', 'strategicFuels', 'tradeBalance', 'baseloadPower'];
-      allFields.forEach(field => {
-        setLoadingStates(prev => ({ ...prev, [field]: true }));
-      });
+      setLoadingStates(prev => ({
+        ...prev,
+        ...Object.fromEntries(allFields.map(field => [field, true]))
+      }));
       
       // Then fetch all enhanced data
       const enhancedData = await service.getAllEnhancedData();
@@ -166,15 +188,27 @@ export const useEnhancedEIAData = (
       setLastUpdated(Date.now());
       
       // Update data availability and loading states for all data
+      const availabilityUpdates: Record<string, boolean> = {};
+      const loadingUpdates: Record<string, boolean> = {};
       Object.keys(enhancedData).forEach(key => {
-        if (enhancedData[key as keyof EnhancedEIAData] !== null && 
-            key !== 'loading' && key !== 'error' && key !== 'lastUpdated' && key !== 'dataQuality') {
-          setDataAvailability(prev => ({ ...prev, [key]: true }));
-          setLoadingStates(prev => ({ ...prev, [key]: false }));
-        } else {
-          setLoadingStates(prev => ({ ...prev, [key]: false }));
+        loadingUpdates[key] = false;
+        if (
+          enhancedData[key as keyof EnhancedEIAData] !== null &&
+          key !== 'loading' &&
+          key !== 'error' &&
+          key !== 'lastUpdated' &&
+          key !== 'dataQuality'
+        ) {
+          availabilityUpdates[key] = true;
         }
       });
+
+      if (Object.keys(availabilityUpdates).length > 0) {
+        setDataAvailability(prev => ({ ...prev, ...availabilityUpdates }));
+      }
+      if (Object.keys(loadingUpdates).length > 0) {
+        setLoadingStates(prev => ({ ...prev, ...loadingUpdates }));
+      }
       
       // Call success callback if provided
       onSuccess?.(enhancedData);
@@ -199,6 +233,8 @@ export const useEnhancedEIAData = (
         dataQuality: 'poor',
         lastUpdated: Date.now()
       }));
+    } finally {
+      isFetchingRef.current = false;
     }
   }, [onSuccess, onError]); // Include callback dependencies
 
@@ -323,8 +359,9 @@ export const useEnhancedEIAData = (
 
   // Auto-refresh setup
   useEffect(() => {
-    // Initial data fetch only on mount
-    fetchData();
+    if (typeof document === 'undefined' || !document.hidden) {
+      fetchData();
+    }
   }, [fetchData]);
 
   // Separate effect for auto-refresh interval management
@@ -337,7 +374,30 @@ export const useEnhancedEIAData = (
     
     // Setup auto-refresh if enabled
     if (enableAutoRefresh && refreshInterval) {
-      intervalRef.current = setInterval(fetchData, refreshInterval);
+      intervalRef.current = setInterval(() => {
+        if (typeof document !== 'undefined' && document.hidden) {
+          return;
+        }
+        void fetchData();
+      }, refreshInterval);
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        return;
+      }
+
+      if (
+        enableAutoRefresh &&
+        refreshInterval &&
+        Date.now() - lastUpdatedRef.current >= refreshInterval
+      ) {
+        void fetchData();
+      }
+    };
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
     }
     
     // Cleanup function
@@ -345,6 +405,9 @@ export const useEnhancedEIAData = (
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
+      }
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
       }
     };
   }, [fetchData, enableAutoRefresh, refreshInterval]);

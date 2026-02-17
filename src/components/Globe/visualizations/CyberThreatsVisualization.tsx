@@ -15,6 +15,7 @@ import { Group, Vector3, Color, BufferGeometry, Float32BufferAttribute } from 't
 import { useFrame } from '@react-three/fiber';
 import { ThreatIntelligenceService } from '../../../services/CyberThreats/ThreatIntelligenceService';
 import { useCyberCommandSettings } from '../../../hooks/useCyberCommandSettings';
+import { latLngToGlobeVector3 } from '../../../utils/globeCoordinates';
 import type {
   CyberThreatData,
   ThreatQueryOptions,
@@ -89,14 +90,7 @@ const STATUS_PULSE_SPEEDS = {
  * Convert lat/lng to 3D position on globe
  */
 function latLngToVector3(lat: number, lng: number, radius: number = 1.02): Vector3 {
-  const phi = (90 - lat) * (Math.PI / 180);
-  const theta = (lng + 180) * (Math.PI / 180);
-  
-  return new Vector3(
-    -radius * Math.sin(phi) * Math.cos(theta),
-    radius * Math.cos(phi),
-    radius * Math.sin(phi) * Math.sin(theta)
-  );
+  return latLngToGlobeVector3(lat, lng, radius);
 }
 
 /**

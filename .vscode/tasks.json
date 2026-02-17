@@ -73,6 +73,24 @@
 				"build"
 			],
 			"group": "build"
+		},
+		{
+			"label": "Build Starcom App",
+			"type": "shell",
+			"command": "npm run build",
+			"group": "build"
+		},
+		{
+			"label": "Starcom: Type Check",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"tsc",
+				"--noEmit",
+				"--project",
+				"tsconfig.starcom.json"
+			],
+			"group": "build"
 		}
 	]
 }

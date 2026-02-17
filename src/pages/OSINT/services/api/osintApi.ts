@@ -32,6 +32,20 @@ class OsintApiClient {
   constructor(baseUrl: string = '/api/osint') {
     this.baseUrl = baseUrl;
   }
+
+  /**
+   * Expose the configured base URL for consumers that need to build manual fetch requests
+   */
+  getBaseUrl(): string {
+    return this.baseUrl;
+  }
+
+  /**
+   * Expose the current auth token for low-level consumers
+   */
+  getAuthToken(): string | undefined {
+    return this.authToken;
+  }
   
   /**
    * Set authentication token for authenticated requests
@@ -258,7 +272,7 @@ class OsintApiClient {
   /**
    * POST request helper
    */
-  async post<T>(endpoint: string, data: Record<string, unknown>, options: RequestOptions = {}): Promise<ApiResponse<T>> {
+  async post<T>(endpoint: string, data: unknown, options: RequestOptions = {}): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -269,7 +283,7 @@ class OsintApiClient {
   /**
    * PUT request helper
    */
-  async put<T>(endpoint: string, data: Record<string, unknown>, options: RequestOptions = {}): Promise<ApiResponse<T>> {
+  async put<T>(endpoint: string, data: unknown, options: RequestOptions = {}): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -290,7 +304,7 @@ class OsintApiClient {
   /**
    * PATCH request helper
    */
-  async patch<T>(endpoint: string, data: Record<string, unknown>, options: RequestOptions = {}): Promise<ApiResponse<T>> {
+  async patch<T>(endpoint: string, data: unknown, options: RequestOptions = {}): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
       method: 'PATCH',
       body: JSON.stringify(data),

@@ -30,10 +30,9 @@ export function disposeGLTF(root: THREE.Object3D | null | undefined, options: Di
       counters.geometries += 1;
     }
 
-    if (merged.material && (mesh as THREE.Mesh).material) {
-      const materials = Array.isArray((mesh as THREE.Mesh).material)
-        ? (mesh as THREE.Mesh).material
-        : [(mesh as THREE.Mesh).material];
+    const meshMaterial = (mesh as THREE.Mesh).material;
+    if (merged.material && meshMaterial) {
+      const materials = Array.isArray(meshMaterial) ? meshMaterial : [meshMaterial];
       materials.forEach(mat => disposeMaterial(mat, merged.textures, counters));
       counters.materials += materials.length;
     }

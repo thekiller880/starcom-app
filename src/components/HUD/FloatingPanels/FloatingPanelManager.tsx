@@ -4,6 +4,7 @@ import { useVisualizationMode } from '../../../context/VisualizationModeContext'
 import { useGlobeContext } from '../../../context/GlobeContext';
 import { FloatingPanelContext, FloatingPanel } from './FloatingPanelContext';
 import styles from './FloatingPanelManager.module.css';
+import { latLngToGlobeVector3 } from '../../../utils/globeCoordinates';
 
 interface FloatingPanelManagerProps {
   children?: React.ReactNode;
@@ -64,12 +65,11 @@ const FloatingPanelManager: React.FC<FloatingPanelManagerProps> = ({ children })
     // For now, using a simple projection
     const globeCenter = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
     const globeRadius = Math.min(window.innerWidth, window.innerHeight) * 0.3;
-    
-    const phi = (90 - lat) * (Math.PI / 180);
-    const theta = (lng + 180) * (Math.PI / 180);
-    
-    const x = globeCenter.x + (globeRadius * Math.sin(phi) * Math.cos(theta));
-    const y = globeCenter.y + (globeRadius * Math.cos(phi));
+
+    const point = latLngToGlobeVector3(lat, lng, globeRadius);
+
+    const x = globeCenter.x + point.x;
+    const y = globeCenter.y + point.y;
     
     return { x, y };
   }, []);

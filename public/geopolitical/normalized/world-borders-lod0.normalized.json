@@ -9615,94 +9615,16 @@
       }
     },
     {
-      "id": 1746707407,
-      "classification": "International",
-      "coordinates": [
-        [
-          100.12249881388664,
-          20.316641343664557
-        ],
-        [
-          101.1546321960522,
-          19.579218654859517
-        ],
-        [
-          101.10517785034904,
-          17.47952769619218
-        ],
-        [
-          102.10149946493618,
-          18.210645860257785
-        ],
-        [
-          103.09119974412556,
-          18.138253008310414
-        ],
-        [
-          103.94955203655832,
-          18.319011338773862
-        ],
-        [
-          104.81606245322837,
-          17.300287990787922
-        ],
-        [
-          104.75064008994696,
-          16.647537136293238
-        ],
-        [
-          105.62211144411708,
-          15.699972235573227
-        ],
-        [
-          105.1833268575266,
-          14.346256415255255
-        ]
-      ],
-      "rawFeatureCla": "International boundary (verify)",
-      "perspectives": {
-        "ISO": "blank",
-        "US": "blank",
-        "FR": "blank",
-        "RU": "blank",
-        "ES": "blank",
-        "CN": "blank",
-        "TW": "blank",
-        "IN": "blank",
-        "NP": "blank",
-        "PK": "blank",
-        "DE": "blank",
-        "GB": "blank",
-        "BR": "blank",
-        "IL": "blank",
-        "PS": "blank",
-        "SA": "blank",
-        "EG": "blank",
-        "MA": "blank",
-        "PT": "blank",
-        "AR": "blank",
-        "JP": "blank",
-        "KO": "blank",
-        "VN": "blank",
-        "TR": "blank",
-        "ID": "blank",
-        "PL": "blank",
-        "GR": "blank",
-        "IT": "blank",
-        "NL": "blank",
-        "SE": "blank",
-        "BD": "blank",
-        "UA": "blank",
-        "TLC": "blank"
-      }
-    },
-    {
       "id": 1746707399,
       "classification": "International",
       "coordinates": [
         [
           101.13892256063548,
           21.56746938728935
+        ],
+        [
+          100.12249881388664,
+          20.316641343664685
         ],
         [
           100.12249881388664,
@@ -21840,9 +21762,9 @@
     }
   ],
   "stats": {
-    "total": 365,
+    "total": 364,
     "countsPerClass": {
-      "International": 332,
+      "International": 331,
       "Disputed": 21,
       "LineOfControl": 7,
       "Indefinite": 5,
@@ -21857,7 +21779,7 @@
       "unrecognized": 105,
       "verify": 1,
       "admin1": 22,
-      "blank": 11797
+      "blank": 11764
     },
     "perspectiveFieldCounts": {
       "ISO": {
@@ -21865,231 +21787,231 @@
         "unrecognized": 5,
         "verify": 0,
         "admin1": 0,
-        "blank": 359
+        "blank": 358
       },
       "US": {
         "recognized": 4,
         "unrecognized": 1,
         "verify": 0,
         "admin1": 0,
-        "blank": 360
+        "blank": 359
       },
       "FR": {
         "recognized": 3,
         "unrecognized": 1,
         "verify": 0,
         "admin1": 0,
-        "blank": 361
+        "blank": 360
       },
       "RU": {
         "recognized": 9,
         "unrecognized": 11,
         "verify": 0,
         "admin1": 1,
-        "blank": 344
+        "blank": 343
       },
       "ES": {
         "recognized": 3,
         "unrecognized": 1,
         "verify": 0,
         "admin1": 0,
-        "blank": 361
+        "blank": 360
       },
       "CN": {
         "recognized": 7,
         "unrecognized": 13,
         "verify": 0,
         "admin1": 1,
-        "blank": 344
+        "blank": 343
       },
       "TW": {
         "recognized": 4,
         "unrecognized": 3,
         "verify": 0,
         "admin1": 1,
-        "blank": 357
+        "blank": 356
       },
       "IN": {
         "recognized": 5,
         "unrecognized": 9,
         "verify": 0,
         "admin1": 1,
-        "blank": 350
+        "blank": 349
       },
       "NP": {
         "recognized": 3,
         "unrecognized": 4,
         "verify": 0,
         "admin1": 1,
-        "blank": 357
+        "blank": 356
       },
       "PK": {
         "recognized": 6,
         "unrecognized": 8,
         "verify": 0,
         "admin1": 2,
-        "blank": 349
+        "blank": 348
       },
       "DE": {
         "recognized": 3,
         "unrecognized": 1,
         "verify": 0,
         "admin1": 0,
-        "blank": 361
+        "blank": 360
       },
       "GB": {
         "recognized": 3,
         "unrecognized": 1,
         "verify": 0,
         "admin1": 1,
-        "blank": 360
+        "blank": 359
       },
       "BR": {
         "recognized": 4,
         "unrecognized": 2,
         "verify": 0,
         "admin1": 1,
-        "blank": 358
+        "blank": 357
       },
       "IL": {
         "recognized": 5,
         "unrecognized": 2,
         "verify": 0,
         "admin1": 1,
-        "blank": 357
+        "blank": 356
       },
       "PS": {
         "recognized": 3,
         "unrecognized": 3,
         "verify": 0,
         "admin1": 1,
-        "blank": 358
+        "blank": 357
       },
       "SA": {
         "recognized": 3,
         "unrecognized": 5,
         "verify": 0,
         "admin1": 1,
-        "blank": 356
+        "blank": 355
       },
       "EG": {
         "recognized": 3,
         "unrecognized": 4,
         "verify": 0,
         "admin1": 1,
-        "blank": 357
+        "blank": 356
       },
       "MA": {
         "recognized": 3,
         "unrecognized": 2,
         "verify": 0,
         "admin1": 0,
-        "blank": 360
+        "blank": 359
       },
       "PT": {
         "recognized": 3,
         "unrecognized": 2,
         "verify": 0,
         "admin1": 0,
-        "blank": 360
+        "blank": 359
       },
       "AR": {
         "recognized": 4,
         "unrecognized": 2,
         "verify": 0,
         "admin1": 1,
-        "blank": 358
+        "blank": 357
       },
       "JP": {
         "recognized": 3,
         "unrecognized": 2,
         "verify": 0,
         "admin1": 0,
-        "blank": 360
+        "blank": 359
       },
       "KO": {
         "recognized": 3,
         "unrecognized": 1,
         "verify": 0,
         "admin1": 1,
-        "blank": 360
+        "blank": 359
       },
       "VN": {
         "recognized": 3,
         "unrecognized": 2,
         "verify": 0,
         "admin1": 1,
-        "blank": 359
+        "blank": 358
       },
       "TR": {
         "recognized": 6,
         "unrecognized": 3,
         "verify": 0,
         "admin1": 1,
-        "blank": 355
+        "blank": 354
       },
       "ID": {
         "recognized": 3,
         "unrecognized": 3,
         "verify": 1,
         "admin1": 1,
-        "blank": 357
+        "blank": 356
       },
       "PL": {
         "recognized": 3,
         "unrecognized": 2,
         "verify": 0,
         "admin1": 1,
-        "blank": 359
+        "blank": 358
       },
       "GR": {
         "recognized": 3,
         "unrecognized": 3,
         "verify": 0,
         "admin1": 1,
-        "blank": 358
+        "blank": 357
       },
       "IT": {
         "recognized": 3,
         "unrecognized": 1,
         "verify": 0,
         "admin1": 0,
-        "blank": 361
+        "blank": 360
       },
       "NL": {
         "recognized": 3,
         "unrecognized": 1,
         "verify": 0,
         "admin1": 0,
-        "blank": 361
+        "blank": 360
       },
       "SE": {
         "recognized": 2,
         "unrecognized": 1,
         "verify": 0,
         "admin1": 0,
-        "blank": 362
+        "blank": 361
       },
       "BD": {
         "recognized": 3,
         "unrecognized": 4,
         "verify": 0,
         "admin1": 1,
-        "blank": 357
+        "blank": 356
       },
       "UA": {
         "recognized": 3,
         "unrecognized": 2,
         "verify": 0,
         "admin1": 1,
-        "blank": 359
+        "blank": 358
       },
       "TLC": {
         "recognized": 3,
         "unrecognized": 0,
         "verify": 0,
         "admin1": 0,
-        "blank": 362
+        "blank": 361
       }
     }
   }

@@ -21,7 +21,7 @@ export const useRegisteredPoller = (
 
   return {
     key,
-    scope: options.scope,
+    scope: Array.isArray(options.scope) ? options.scope.join(',') : options.scope,
     stop: () => pollerRegistry.stop(key),
     runNow: () => pollerRegistry.runNow(key),
     isActive: () => pollerRegistry.isActive(key),

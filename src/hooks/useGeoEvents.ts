@@ -332,7 +332,7 @@ export const useGeoEvents = (options: UseGeoEventsOptions): UseGeoEventsState =>
       logTelemetry({ type: 'fetch_start', params: { refreshMinutes: safeRefreshMinutes } });
 
       try {
-        const raw = await fetchNaturalEventsFn({ signal: controller.signal, timeoutMs: 10000, retries: 1 });
+        const raw = await fetchNaturalEventsFn({ signal: controller.signal, timeoutMs: 10000 });
         if (!enabledRef.current) return;
         const mapped: NaturalEvent[] = raw.map((event) => ({
           ...event,

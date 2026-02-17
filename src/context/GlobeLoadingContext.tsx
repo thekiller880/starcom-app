@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useCallback, useMemo } from 'react';
 
 interface GlobeLoadingContextType {
   hasGlobeLoadedBefore: boolean;
@@ -17,21 +17,23 @@ export const GlobeLoadingProvider: React.FC<GlobeLoadingProviderProps> = ({ chil
   const [hasGlobeLoadedBefore, setHasGlobeLoadedBefore] = useState(false);
   const [isGlobeInitialized, setIsGlobeInitialized] = useState(false);
 
-  const markGlobeAsLoaded = () => {
+  const markGlobeAsLoaded = useCallback(() => {
     setHasGlobeLoadedBefore(true);
-  };
+  }, []);
 
-  const setGlobeInitialized = (initialized: boolean) => {
+  const setGlobeInitialized = useCallback((initialized: boolean) => {
     setIsGlobeInitialized(initialized);
-  };
+  }, []);
+
+  const contextValue = useMemo(() => ({
+    hasGlobeLoadedBefore,
+    markGlobeAsLoaded,
+    isGlobeInitialized,
+    setGlobeInitialized
+  }), [hasGlobeLoadedBefore, markGlobeAsLoaded, isGlobeInitialized, setGlobeInitialized]);
 
   return (
-    <GlobeLoadingContext.Provider value={{ 
-      hasGlobeLoadedBefore, 
-      markGlobeAsLoaded, 
-      isGlobeInitialized, 
-      setGlobeInitialized 
-    }}>
+    <GlobeLoadingContext.Provider value={contextValue}>
       {children}
     </GlobeLoadingContext.Provider>
   );

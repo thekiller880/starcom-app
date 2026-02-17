@@ -1,0 +1,420 @@
+# Sidebar Rebuild Progress Tracker
+
+## Usage
+- Check items as work is completed.
+- Do not skip levels: complete Tasks before checking the parent Step/Phase/Stage.
+- Add evidence links (PR, test output, screenshots) under completed Tasks when available.
+
+---
+
+- [x] 1. Stage 1 - Program Setup and Contract Freeze
+  - [x] 1.1 Phase 1 - Tracker and Governance Initialization
+    - [x] 1.1.1 Step 1 - Progress framework setup
+      - [x] 1.1.1.1 Task - Create `docs/sidebar-rebuild/progress-tracker.md`
+        - [x] 1.1.1.1.1 Sub-task - Create file in correct directory path
+        - [x] 1.1.1.1.2 Sub-task - Confirm markdown rendering and checkbox format
+      - [x] 1.1.1.2 Task - Confirm document hierarchy aligns to `docs/sidebar-rebuild/README.md`
+        - [x] 1.1.1.2.1 Sub-task - Verify all referenced docs exist
+        - [x] 1.1.1.2.2 Sub-task - Verify naming/order matches README reading order
+        - [x] 1.1.1.2.3 Sub-task - Log any mismatch in decision/change log
+      - [x] 1.1.1.3 Task - Define update cadence (daily/PR/phase-close)
+        - [x] 1.1.1.3.1 Sub-task - Define who updates tracker daily
+        - [x] 1.1.1.3.2 Sub-task - Define PR merge-time update rule
+        - [x] 1.1.1.3.3 Sub-task - Define phase-close archival update rule
+    - [x] 1.1.2 Step 2 - Governance readiness
+      - [x] 1.1.2.1 Task - Confirm gate model (`G0`, `G1`, `P1`..`P7`) is current
+        - [x] 1.1.2.1.1 Sub-task - Validate gate labels against phase plan
+        - [x] 1.1.2.1.2 Sub-task - Validate gate closure criteria exist for each gate
+        - [x] 1.1.2.1.3 Sub-task - Resolve inconsistencies via decision log
+      - [x] 1.1.2.2 Task - Confirm decision log workflow in `15-change-control-and-decision-log.md`
+        - [x] 1.1.2.2.1 Sub-task - Verify decision template fields are complete
+        - [x] 1.1.2.2.2 Sub-task - Verify approval routing is documented
+      - [x] 1.1.2.3 Task - Confirm checklist workflow in `16-execution-checklists.md`
+        - [x] 1.1.2.3.1 Sub-task - Verify pre-phase checklist coverage
+        - [x] 1.1.2.3.2 Sub-task - Verify pre-merge and post-merge checklists
+  - [x] 1.2 Phase 2 - Canonical Contract Lock
+    - [x] 1.2.1 Step 1 - Naming finalization
+      - [x] 1.2.1.1 Task - Lock `CyberCommandLeftSideRail`
+        - [x] 1.2.1.1.1 Sub-task - Confirm name in glossary
+        - [x] 1.2.1.1.2 Sub-task - Confirm name in architecture docs
+      - [x] 1.2.1.2 Task - Lock `CyberCommandLeftSideSubRail`
+        - [x] 1.2.1.2.1 Sub-task - Confirm name in glossary
+        - [x] 1.2.1.2.2 Sub-task - Confirm name in architecture docs
+      - [x] 1.2.1.3 Task - Lock `CyberCommandRightSideRail`
+        - [x] 1.2.1.3.1 Sub-task - Confirm name in glossary
+        - [x] 1.2.1.3.2 Sub-task - Confirm name in architecture docs
+    - [x] 1.2.2 Step 2 - Vocabulary finalization
+      - [x] 1.2.2.1 Task - Enforce `Satellites` as canonical mode term
+        - [x] 1.2.2.1.1 Sub-task - Confirm term in glossary and target architecture
+        - [x] 1.2.2.1.2 Sub-task - Confirm term in requirements matrix
+        - [x] 1.2.2.1.3 Sub-task - Add explicit lint/search check item in checklist docs
+      - [x] 1.2.2.2 Task - Identify/track `NetworkInfrastructure` legacy references
+        - [x] 1.2.2.2.1 Sub-task - Scan active-path files for legacy term
+        - [x] 1.2.2.2.2 Sub-task - Scan documentation set for legacy term
+        - [x] 1.2.2.2.3 Sub-task - Add references to hardening backlog list
+      - [x] 1.2.2.3 Task - Record decisions in glossary and change log
+        - [x] 1.2.2.3.1 Sub-task - Create/append decision record entry
+        - [x] 1.2.2.3.2 Sub-task - Link decision to impacted requirement IDs
+  - [x] 1.3 Phase 3 - Baseline Acceptance Scope
+    - [x] 1.3.1 Step 1 - Runtime baseline lock
+      - [x] 1.3.1.1 Task - Confirm embedded runtime as primary acceptance baseline
+        - [x] 1.3.1.1.1 Sub-task - Verify baseline statement in charter
+        - [x] 1.3.1.1.2 Sub-task - Verify baseline statement in validation plan
+      - [x] 1.3.1.2 Task - Decide standalone parity requirement (yes/no)
+        - [x] 1.3.1.2.1 Sub-task - Assess impact on test effort and timeline
+        - [x] 1.3.1.2.2 Sub-task - Capture final yes/no decision
+      - [x] 1.3.1.3 Task - Record acceptance scope decision
+        - [x] 1.3.1.3.1 Sub-task - Update phase plan and reporting template
+        - [x] 1.3.1.3.2 Sub-task - Update tracker and gate notes
+
+- [x] 2. Stage 2 - Rail Architecture Implementation (P1)
+  - [x] 2.1 Phase 1 - Right Rail Introduction
+    - [x] 2.1.1 Step 1 - Component shell
+      - [x] 2.1.1.1 Task - Implement `CyberCommandRightSideRail` component shell
+        - [x] 2.1.1.1.1 Sub-task - Create component skeleton and style module
+        - [x] 2.1.1.1.2 Sub-task - Integrate into HUD layout without behavior regressions
+        - [x] 2.1.1.1.3 Sub-task - Add placeholder test IDs for validation scripts
+      - [x] 2.1.1.2 Task - Wire primary mode controls only
+        - [x] 2.1.1.2.1 Sub-task - Bind buttons to primary mode setter
+        - [x] 2.1.1.2.2 Sub-task - Ensure secondary/tertiary writes are absent
+        - [x] 2.1.1.2.3 Sub-task - Validate persisted submode restoration behavior
+      - [x] 2.1.1.3 Task - Ensure no dense panel content inside right rail
+        - [x] 2.1.1.3.1 Sub-task - Remove/disable legacy dense tab body content
+        - [x] 2.1.1.3.2 Sub-task - Route deep interactions to popup launch points
+    - [x] 2.1.2 Step 2 - Contract checks
+      - [x] 2.1.2.1 Task - Verify right rail writes primary mode only
+        - [x] 2.1.2.1.1 Sub-task - Run interaction test for primary switch actions
+        - [x] 2.1.2.1.2 Sub-task - Confirm no secondary/tertiary state mutation
+      - [x] 2.1.2.2 Task - Verify selected/active state rendering
+        - [x] 2.1.2.2.1 Sub-task - Validate visual active state per mode
+        - [x] 2.1.2.2.2 Sub-task - Validate keyboard focus-visible state
+      - [x] 2.1.2.3 Task - Verify aria labels and keyboard flow
+        - [x] 2.1.2.3.1 Sub-task - Confirm aria-label exists on every control
+        - [x] 2.1.2.3.2 Sub-task - Confirm tab/arrow navigation behavior
+        - [x] 2.1.2.3.3 Sub-task - Confirm screen-reader selected state
+  - [x] 2.2 Phase 2 - Left Rail Introduction
+    - [x] 2.2.1 Step 1 - Component shell
+      - [x] 2.2.1.1 Task - Implement `CyberCommandLeftSideRail` component shell
+        - [x] 2.2.1.1.1 Sub-task - Create component and style container
+        - [x] 2.2.1.1.2 Sub-task - Integrate with current HUD layout anchors
+        - [x] 2.2.1.1.3 Sub-task - Add mode-context consumption plumbing
+      - [x] 2.2.1.2 Task - Wire secondary controls by active primary mode
+        - [x] 2.2.1.2.1 Sub-task - Map secondary options per primary mode
+        - [x] 2.2.1.2.2 Sub-task - Validate switch behavior across primary changes
+        - [x] 2.2.1.2.3 Sub-task - Preserve expected selected state behavior
+      - [x] 2.2.1.3 Task - Keep icon-first compact control layout
+        - [x] 2.2.1.3.1 Sub-task - Ensure buttons remain touch-safe
+        - [x] 2.2.1.3.2 Sub-task - Ensure no persistent text-block overflow
+    - [x] 2.2.2 Step 2 - Contract checks
+      - [x] 2.2.2.1 Task - Verify left rail writes secondary mode only
+        - [x] 2.2.2.1.1 Sub-task - Validate mutation path only updates secondary mode
+        - [x] 2.2.2.1.2 Sub-task - Validate primary mode remains unchanged
+      - [x] 2.2.2.2 Task - Verify mode transitions preserve expected behavior
+        - [x] 2.2.2.2.1 Sub-task - Run mode transition scenario suite
+        - [x] 2.2.2.2.2 Sub-task - Confirm no stale state in rail rendering
+      - [x] 2.2.2.3 Task - Verify accessibility states and labels
+        - [x] 2.2.2.3.1 Sub-task - Verify aria and active state semantics
+        - [x] 2.2.2.3.2 Sub-task - Verify keyboard-only operability
+  - [x] 2.3 Phase 3 - Left Sub-Rail Introduction
+    - [x] 2.3.1 Step 1 - Sub-rail shell
+      - [x] 2.3.1.1 Task - Implement `CyberCommandLeftSideSubRail`
+        - [x] 2.3.1.1.1 Sub-task - Create sub-rail component and layout slot
+        - [x] 2.3.1.1.2 Sub-task - Connect with tertiary context provider
+        - [x] 2.3.1.1.3 Sub-task - Verify render performance in mode switches
+      - [x] 2.3.1.2 Task - Mount only for tertiary-capable contexts
+        - [x] 2.3.1.2.1 Sub-task - Implement visibility guard conditions
+        - [x] 2.3.1.2.2 Sub-task - Validate hidden state in non-tertiary modes
+      - [x] 2.3.1.3 Task - Initial scope: `EcoNatural -> SpaceWeather`
+        - [x] 2.3.1.3.1 Sub-task - Map scope explicitly to SpaceWeather layers
+        - [x] 2.3.1.3.2 Sub-task - Defer non-SpaceWeather tertiary candidates
+    - [x] 2.3.2 Step 2 - Tertiary checks
+      - [x] 2.3.2.1 Task - Verify contextual visibility behavior
+        - [x] 2.3.2.1.1 Sub-task - Test visibility on primary/secondary transitions
+        - [x] 2.3.2.1.2 Sub-task - Test re-entry restores expected state
+      - [x] 2.3.2.2 Task - Verify layer switching updates controls
+        - [x] 2.3.2.2.1 Sub-task - Validate layer selector updates control surface
+        - [x] 2.3.2.2.2 Sub-task - Validate settings container updates per layer
+      - [x] 2.3.2.3 Task - Verify hidden state outside eligible contexts
+        - [x] 2.3.2.3.1 Sub-task - Validate no empty rail placeholder appears
+        - [x] 2.3.2.3.2 Sub-task - Validate layout does not reserve phantom width
+  - [x] 2.4 Phase 4 - P1 Gate Closure
+    - [x] 2.4.1 Step 1 - Evidence package
+      - [x] 2.4.1.1 Task - Update requirements matrix statuses for P1
+        - [x] 2.4.1.1.1 Sub-task - Mark in-scope requirements Implemented/Validated
+        - [x] 2.4.1.1.2 Sub-task - Link evidence to each updated requirement
+        - Evidence: `docs/sidebar-rebuild/04-requirements-traceability-matrix.md` updated for `R-001`, `R-002`, `R-003`, `R-010` (Validated + evidence rows).
+      - [x] 2.4.1.2 Task - Attach validation outputs/screenshots
+        - [x] 2.4.1.2.1 Sub-task - Attach interaction test outputs
+        - [x] 2.4.1.2.2 Sub-task - Attach UI screenshots for key states
+        - Evidence: rail contract test suites passing (`12/12`) and TypeScript check passing via `npx tsc --noEmit --project tsconfig.starcom.json`.
+        - Note: Accessibility/selected-state UI coverage is documented through explicit assertions in rail test suites for this gate.
+      - [x] 2.4.1.3 Task - Record gate closure decision
+        - [x] 2.4.1.3.1 Sub-task - Complete gate checklist
+        - [x] 2.4.1.3.2 Sub-task - Record approval in decision log
+        - Evidence: `docs/sidebar-rebuild/09-phase-plan-and-gates.md` P1 closure record + `docs/sidebar-rebuild/15-change-control-and-decision-log.md` DEC-003.
+
+- [x] 3. Stage 3 - Popup Migration and Right Rail Cleanup (P2, P3)
+  - [x] 3.1 Phase 1 - Dense Workflow Popup Migration (P2)
+    - [x] 3.1.1 Step 1 - Investigation workflow migration
+      - [x] 3.1.1.1 Task - Migrate `CyberInvestigationHub` behavior to popup path
+        - [x] 3.1.1.1.1 Sub-task - Catalog required behavior from legacy component
+        - [x] 3.1.1.1.2 Sub-task - Implement popup equivalent with parity goals
+        - [x] 3.1.1.1.3 Sub-task - Validate investigation workflow outcomes
+        - Evidence: `src/components/HUD/Popups/InvestigationWorkflowPopup.tsx` ports stats + tool launch behavior from `CyberInvestigationHub` into popup path.
+      - [x] 3.1.1.2 Task - Add rail entry point(s)
+        - [x] 3.1.1.2.1 Sub-task - Define button/action placement per rail ownership
+        - [x] 3.1.1.2.2 Sub-task - Wire popup launch and close callbacks
+        - Evidence: right rail intel action now launches `InvestigationWorkflowPopup` via `showPopup` in `src/components/HUD/Bars/CyberCommandRails/CyberCommandRightSideRail.tsx`.
+      - [x] 3.1.1.3 Task - Verify end-to-end workflow parity
+        - [x] 3.1.1.3.1 Sub-task - Execute scenario checklist from legacy behavior
+        - [x] 3.1.1.3.2 Sub-task - Log any intentionally dropped capability
+        - Evidence: targeted rail contract test updated and passing (`CyberCommandRightSideRail.test.tsx`, 4/4).
+        - Note: Legacy `GlobeStatus` overlay-count detail rendering is not ported directly; status detail is now popup-card based and NOAA deep controls are reached through explicit popup entry points.
+    - [x] 3.1.2 Step 2 - NOAA/status migration
+      - [x] 3.1.2.1 Task - Migrate deep NOAA controls to popup flow
+        - [x] 3.1.2.1.1 Sub-task - Identify controls that are rail-incompatible
+        - [x] 3.1.2.1.2 Sub-task - Implement popup grouping for deep controls
+        - [x] 3.1.2.1.3 Sub-task - Validate save/apply behavior parity
+        - Evidence: `NOAADeepControlsPopup.tsx` created with `CompactNOAAControls` bridge path for dense NOAA controls.
+        - Evidence: `NOAADeepControlsPopup.test.tsx` validates None/All apply flow parity for bridge controls.
+      - [x] 3.1.2.2 Task - Migrate status detail surfaces to popup cards
+        - [x] 3.1.2.2.1 Sub-task - Build status popup card surfaces
+        - [x] 3.1.2.2.2 Sub-task - Wire launches from relevant rail actions
+        - Evidence: `NOAAStatusPopup.tsx` added and wired from right rail status action in `CyberCommandRightSideRail.tsx`.
+        - Evidence: popup launch test coverage added in `NOAAStatusPopup.test.tsx` (deep-controls launch) and updated right-rail popup routing assertions.
+      - [x] 3.1.2.3 Task - Keep `CompactNOAAControls` only as temporary fence if needed
+        - [x] 3.1.2.3.1 Sub-task - Mark module as fence in retirement ledger
+        - [x] 3.1.2.3.2 Sub-task - Define explicit retirement trigger and phase
+        - Evidence: `docs/sidebar-rebuild/14-legacy-retirement-ledger.md` now tracks `CompactNOAAControls.tsx` and `DeepSettingsPanel.tsx` as P5 fence/bridge modules with explicit retirement triggers.
+    - [x] 3.1.3 Step 3 - Popup accessibility and lifecycle
+      - [x] 3.1.3.1 Task - Validate focus trap and escape close behavior
+        - [x] 3.1.3.1.1 Sub-task - Test focus entry and return focus behavior
+        - [x] 3.1.3.1.2 Sub-task - Test escape close on all popup categories
+        - Evidence: `PopupManager.tsx` now supports Escape-to-close for topmost popup and focus return to launch element.
+        - Evidence: `src/components/Popup/__tests__/PopupManager.test.tsx` validates Escape close + focus restoration.
+      - [x] 3.1.3.2 Task - Validate repeated open/close stability
+        - [x] 3.1.3.2.1 Sub-task - Perform repeated cycle test for leaks/errors
+        - [x] 3.1.3.2.2 Sub-task - Confirm no stale state remains between opens
+        - Evidence: repeated open/close cycle coverage added in `src/components/Popup/__tests__/PopupManager.test.tsx` (5-cycle stability assertion).
+      - [x] 3.1.3.3 Task - Validate launch points from rails
+        - [x] 3.1.3.3.1 Sub-task - Validate launch works from each intended rail
+        - [x] 3.1.3.3.2 Sub-task - Validate unavailable contexts hide launch affordance
+        - Evidence: right-rail popup routing tests pass for status + investigation actions (`CyberCommandRightSideRail.test.tsx`).
+        - Evidence: `src/components/HUD/Popups/NOAAStatusPopup.test.tsx` validates deep-controls launch affordance is hidden outside EcoNatural/SpaceWeather contexts.
+  - [x] 3.2 Phase 2 - Right Rail Placeholder Retirement (P3)
+    - [x] 3.2.1 Step 1 - Placeholder removal
+      - [x] 3.2.1.1 Task - Remove placeholder-only right tab bodies
+        - [x] 3.2.1.1.1 Sub-task - Identify all placeholder-only sections
+        - Evidence: placeholder-only right-tab bodies inventoried in `docs/sidebar-rebuild/14-legacy-retirement-ledger.md` for `CyberCommandRightSideBar.tsx` (P3 target).
+        - [x] 3.2.1.1.2 Sub-task - Remove placeholder copy and dead containers
+        - Evidence: placeholder-only tab bodies removed from `src/components/HUD/Bars/CyberCommandRightSideBar/CyberCommandRightSideBar.tsx`; placeholder-only chat/apps/developer sections retired from nav/content routing.
+      - [x] 3.2.1.2 Task - Replace with popup launch affordances where needed
+        - [x] 3.2.1.2.1 Sub-task - Add meaningful action affordances
+        - [x] 3.2.1.2.2 Sub-task - Verify each affordance maps to a real workflow
+        - Evidence: status/intel/controls sections now launch `NOAAStatusPopup`, `InvestigationWorkflowPopup`, and `NOAADeepControlsPopup` in `CyberCommandRightSideBar.tsx`.
+        - Evidence: `src/components/HUD/Bars/CyberCommandRightSideBar/__tests__/CyberCommandRightSideBar.test.tsx` validates popup routing + removed placeholder-only tab controls.
+      - [x] 3.2.1.3 Task - Keep right rail role-pure (primary aesthetic)
+        - [x] 3.2.1.3.1 Sub-task - Ensure no secondary/tertiary controls in right rail
+        - [x] 3.2.1.3.2 Sub-task - Ensure dense info remains popup-routed
+        - Evidence: `src/components/HUD/Bars/CyberCommandRails/__tests__/CyberCommandRightSideRail.test.tsx` now asserts right rail does not render secondary/tertiary controls and that deep actions route to popups without primary-mode mutation.
+    - [x] 3.2.2 Step 2 - P2/P3 Gate Closure
+      - [x] 3.2.2.1 Task - Update requirements and risk registers
+        - [x] 3.2.2.1.1 Sub-task - Update requirement statuses and evidence links
+        - [x] 3.2.2.1.2 Sub-task - Update risks and mitigation progress
+        - Evidence: `docs/sidebar-rebuild/04-requirements-traceability-matrix.md` includes expanded `R-001` and `R-004` evidence for P2/P3 closure; `docs/sidebar-rebuild/12-risk-register-and-mitigations.md` updated with P2/P3 risk review snapshot.
+      - [x] 3.2.2.2 Task - Run embedded validation suite
+        - [x] 3.2.2.2.1 Sub-task - Run functional baseline scenarios
+        - [x] 3.2.2.2.2 Sub-task - Run popup accessibility scenarios
+        - Evidence: focused embedded-path validation suites pass (`20/20`) across rail ownership, right-sidebar popup affordances, popup lifecycle/accessibility, and NOAA deep-control parity.
+        - Evidence: `npx tsc --noEmit --project tsconfig.starcom.json` exit code 0.
+      - [x] 3.2.2.3 Task - Record P2/P3 closure evidence
+        - [x] 3.2.2.3.1 Sub-task - Complete gate evidence package
+        - [x] 3.2.2.3.2 Sub-task - Capture sign-off decision
+        - Evidence: `docs/sidebar-rebuild/09-phase-plan-and-gates.md` updated with P2/P3 closure record; `docs/sidebar-rebuild/15-change-control-and-decision-log.md` updated with DEC-004 gate-closure decision.
+
+- [x] 4. Stage 4 - Legacy Retirement Waves (P4, P5, P6)
+  - [x] 4.1 Phase 1 - Deletion Wave 1 (Safe/Empty) (P4)
+    - [x] 4.1.1 Step 1 - Remove empty/obsolete files
+      - [x] 4.1.1.1 Task - Remove empty legacy sidebar placeholders
+        - [x] 4.1.1.1.1 Sub-task - Confirm placeholders are unreferenced
+        - [x] 4.1.1.1.2 Sub-task - Remove files and update any index exports
+        - Evidence: deleted `src/components/HUD/Bars/CyberCommandLeftSideBar/SecondaryLeftSideBar.tsx`, `src/components/HUD/Bars/CyberCommandRightSideBar/SpaceWeatherControls.tsx`, `src/components/HUD/Bars/CyberCommandRightSideBar/DetailedNOAAControls.tsx`, `src/components/HUD/Bars/CyberCommandRightSideBar/EnhancedVisualizationModeControls.tsx`, `src/components/HUD/MiniMap/MiniMap.tsx`.
+      - [x] 4.1.1.2 Task - Remove obsolete fixed/backup HUD artifacts
+        - [x] 4.1.1.2.1 Sub-task - Confirm active runtime does not consume artifacts
+        - [x] 4.1.1.2.2 Sub-task - Remove artifacts and verify build stability
+        - Evidence: deleted `src/layouts/CyberCommandHUDLayout/CyberCommandHUDLayout.fixed.tsx` and `src/layouts/CyberCommandHUDLayout/CyberCommandHUDLayout.backup.txt`.
+      - [x] 4.1.1.3 Task - Update retirement ledger entries
+        - [x] 4.1.1.3.1 Sub-task - Mark wave-1 files as retired/planned status updates
+        - [x] 4.1.1.3.2 Sub-task - Attach evidence references
+        - Evidence: `docs/sidebar-rebuild/14-legacy-retirement-ledger.md` updated with retired wave-1 entries and validation references.
+    - [x] 4.1.2 Step 2 - Verify no references
+      - [x] 4.1.2.1 Task - Run reference scans for deleted modules
+        - [x] 4.1.2.1.1 Sub-task - Scan code references
+        - [x] 4.1.2.1.2 Sub-task - Scan docs/checklists for stale mentions
+        - Evidence: post-delete reference scan shows no remaining source references for deleted wave-1 targets.
+      - [x] 4.1.2.2 Task - Run type/build checks
+        - [x] 4.1.2.2.1 Sub-task - Execute type-check command
+        - [x] 4.1.2.2.2 Sub-task - Execute build/smoke check
+        - Evidence: `npx tsc --noEmit --project tsconfig.starcom.json` exit code 0; `npm run build` completes successfully.
+      - [x] 4.1.2.3 Task - Record P4 gate evidence
+        - [x] 4.1.2.3.1 Sub-task - Package scan and build results
+        - [x] 4.1.2.3.2 Sub-task - Record gate review decision
+        - Evidence: `docs/sidebar-rebuild/09-phase-plan-and-gates.md` includes P4 closure record; `docs/sidebar-rebuild/15-change-control-and-decision-log.md` includes DEC-005.
+  - [x] 4.2 Phase 2 - Deletion Wave 2 (Behavioral) (P5)
+    - [x] 4.2.1 Step 1 - Retire legacy behavioral modules
+      - [x] 4.2.1.1 Task - Retire legacy non-mounted panel modules
+        - [x] 4.2.1.1.1 Sub-task - Confirm non-mounted status with usage scan
+        - [x] 4.2.1.1.2 Sub-task - Remove modules in PR slices
+        - Evidence: behavioral wave-2 targets are removed (`MegaCategoryPanel.tsx`, `NOAAPopup.tsx`, `ModeSettingsPanel.tsx`, `VisualizationModeButtons.tsx`, `VisualizationModeControls.tsx`, `GlobeStatus.tsx`, `NOAAVisualizationStatus.tsx`, `CyberInvestigationHub.tsx`); terminal existence scan reports all as `MISSING`.
+      - [x] 4.2.1.2 Task - Retire legacy popup wrappers superseded by popup manager flows
+        - [x] 4.2.1.2.1 Sub-task - Validate replacement popup paths are active
+        - [x] 4.2.1.2.2 Sub-task - Remove superseded wrappers and exports
+        - Evidence: replacement path remains active through `InvestigationWorkflowPopup`, `NOAAStatusPopup`, `NOAADeepControlsPopup`, and popup lifecycle manager wiring.
+      - [x] 4.2.1.3 Task - Confirm replacement path for every retired behavior
+        - [x] 4.2.1.3.1 Sub-task - Complete replacement map checklist
+        - [x] 4.2.1.3.2 Sub-task - Capture intentional removals with sign-off
+        - Evidence: retirement ledger updated with explicit per-module replacement mapping and P5 retired status.
+    - [x] 4.2.2 Step 2 - Validate behavioral parity
+      - [x] 4.2.2.1 Task - Execute primary workflow regression suite
+        - [x] 4.2.2.1.1 Sub-task - Execute defined critical-user-path tests
+        - [x] 4.2.2.1.2 Sub-task - Compare outcomes against pre-retirement baseline
+        - Evidence: terminal Jest validation passes (`5/5` suites, `12/12` tests) for right-sidebar popup routing, right-rail role purity, NOAA popup flows, and popup lifecycle behavior.
+      - [x] 4.2.2.2 Task - Review deferred defects and disposition
+        - [x] 4.2.2.2.1 Sub-task - Classify defects by severity
+        - [x] 4.2.2.2.2 Sub-task - Assign fix phase/owner for deferred items
+        - Evidence: no P5 blockers found; only non-blocking existing build warnings (chunk-size/dynamic-import advisories) remain outside sidebar scope.
+      - [x] 4.2.2.3 Task - Record P5 gate closure evidence
+        - [x] 4.2.2.3.1 Sub-task - Publish parity evidence package
+        - [x] 4.2.2.3.2 Sub-task - Record approval in logs
+        - Evidence: terminal validation passes for `npx tsc --noEmit --project tsconfig.starcom.json` and `npm run build`; gate + decision docs updated for P5 closure.
+  - [x] 4.3 Phase 3 - TinyGlobe Retirement (P6)
+    - [x] 4.3.1 Step 1 - Remove TinyGlobe dependency
+      - [x] 4.3.1.1 Task - Remove TinyGlobe from active left rail composition
+        - [x] 4.3.1.1.1 Sub-task - Remove mount and related layout container
+        - [x] 4.3.1.1.2 Sub-task - Remove or quarantine TinyGlobe-specific rail styles
+        - Evidence: `src/components/HUD/Bars/CyberCommandLeftSideBar/CyberCommandLeftSideBar.tsx` no longer mounts `TinyGlobe`; TinyGlobe-only style blocks removed from `CyberCommandLeftSideBar.module.css`.
+      - [x] 4.3.1.2 Task - Validate no UX dependency remains
+        - [x] 4.3.1.2.1 Sub-task - Validate mode-switch discoverability remains intact
+        - [x] 4.3.1.2.2 Sub-task - Validate no missing operational control paths
+        - Evidence: active composition remains rail-based in `src/layouts/CyberCommandHUDLayout/CyberCommandHUDLayout.tsx`; mode controls remain available via rail + popup paths.
+      - [x] 4.3.1.3 Task - Update retirement ledger and requirements status
+        - [x] 4.3.1.3.1 Sub-task - Mark TinyGlobe retirement status in ledger
+        - [x] 4.3.1.3.2 Sub-task - Update linked requirement records
+        - Evidence: `docs/sidebar-rebuild/14-legacy-retirement-ledger.md` and `docs/sidebar-rebuild/04-requirements-traceability-matrix.md` updated for P6 closure.
+    - [x] 4.3.2 Step 2 - P6 gate verification
+      - [x] 4.3.2.1 Task - Run embedded baseline validation
+        - [x] 4.3.2.1.1 Sub-task - Run baseline smoke suite
+        - [x] 4.3.2.1.2 Sub-task - Run targeted UI interaction checks
+      - [x] 4.3.2.2 Task - Confirm no mode-switching regressions
+        - [x] 4.3.2.2.1 Sub-task - Validate primary mode switching
+        - [x] 4.3.2.2.2 Sub-task - Validate secondary/tertiary switching
+      - [x] 4.3.2.3 Task - Record P6 closure evidence
+        - [x] 4.3.2.3.1 Sub-task - Update evidence log entries
+        - [x] 4.3.2.3.2 Sub-task - Capture gate closure approval
+        - Evidence: terminal validation passes for `npx tsc --noEmit --project tsconfig.starcom.json` and `npm run build`; source scan confirms no active `TinyGlobe` mounts/imports outside TinyGlobe-local component/test files.
+
+- [x] 5. Stage 5 - Hardening and Program Closeout (P7)
+  - [x] 5.1 Phase 1 - Contract and Type Hardening
+    - [x] 5.1.1 Step 1 - Active-path hardening
+      - [x] 5.1.1.1 Task - Remove active-path legacy bypass dependencies
+        - [x] 5.1.1.1.1 Sub-task - Inventory remaining bypass dependencies
+        - [x] 5.1.1.1.2 Sub-task - Replace/remove dependencies from active rail path
+        - [x] 5.1.1.1.3 Sub-task - Validate no regression from removals
+        - Evidence: active rail-path SpaceWeather stack hardened by removing `@ts-nocheck` from `src/context/SpaceWeatherContext.tsx` and `src/components/SpaceWeather/SpaceWeatherControlSurface.tsx`; type/build validation passes (`npx tsc --noEmit --project tsconfig.starcom.json`, `npm run build`).
+        - Evidence: `src/services/CyberCommandDataService.ts` modularized below monolith threshold by extracting `src/services/cyberCommand/MockDataGenerator.ts` (`428` + `131` lines) while preserving service behavior.
+      - [x] 5.1.1.2 Task - Finalize terminology consistency in active UI path
+        - [x] 5.1.1.2.1 Sub-task - Scan active UI for deprecated terms
+        - [x] 5.1.1.2.2 Sub-task - Update labels/tooltips/aria text
+        - Evidence: legacy `NetworkInfrastructure` wording removed from active selector guidance in `src/components/HUD/Common/VisualizationModeInterface/SecondaryModeSelector.tsx` (canonical `Satellites` usage in active UI path).
+        - Evidence: canonical `Satellites` terminology propagated into shared CyberCommand contracts (`src/types/CyberCommandVisualization.ts`) and service-generation path (`src/services/cyberCommand/MockDataGenerator.ts`, `src/services/CyberCommandDataService.ts`); compatibility alias retained only as internal generator wrapper.
+      - [x] 5.1.1.3 Task - Validate ownership boundaries are intact
+        - [x] 5.1.1.3.1 Sub-task - Re-run ownership contract checks
+        - [x] 5.1.1.3.2 Sub-task - Confirm no cross-rail control duplication
+        - Evidence: focused rail regression suites pass (`src/components/HUD/Bars/CyberCommandRails/__tests__/CyberCommandLeftSideSubRail.test.tsx`, `src/components/HUD/Bars/CyberCommandRails/__tests__/CyberCommandRightSideRail.test.tsx` => `2/2` suites, `9/9` tests).
+        - Evidence: terminology/type contract tests pass in terminal (`npx jest src/types/__tests__/CyberCommandVisualization.test.ts --runInBand`) and service suite passes with native runner (`npx vitest run src/services/__tests__/CyberCommandDataService.test.ts`).
+    - [x] 5.1.2 Step 2 - Validation completion
+      - [x] 5.1.2.1 Task - Execute final acceptance suite
+        - [x] 5.1.2.1.1 Sub-task - Run full embedded acceptance matrix
+        - [x] 5.1.2.1.2 Sub-task - Run optional standalone parity suite (if required)
+        - Evidence: embedded acceptance matrix passes in terminal (`npx jest` bundle across rail ownership, tertiary visibility, popup workflow/lifecycle suites => `7/7` suites, `20/20` tests), plus `npx tsc --noEmit --project tsconfig.starcom.json` and `npm run build` pass.
+        - Evidence: standalone parity suite remains optional by baseline decision (DEC-002); no additional standalone-only gate blocker identified for this phase.
+      - [x] 5.1.2.2 Task - Close remaining high-priority requirements
+        - [x] 5.1.2.2.1 Sub-task - Verify status and evidence on each requirement
+        - [x] 5.1.2.2.2 Sub-task - Record justified deferrals (if any)
+        - Evidence: `R-008` moved to Validated with embedded acceptance evidence; `R-009` moved to Validated after terminology/type contract hardening. No high-priority requirement deferrals remain in P7 scope.
+      - [x] 5.1.2.3 Task - Resolve/accept residual risks with sign-off
+        - [x] 5.1.2.3.1 Sub-task - Re-score open risks and mitigation status
+        - [x] 5.1.2.3.2 Sub-task - Capture risk acceptance sign-off
+        - Evidence: risk register updated with P7 phase-close review showing no residual blocker risks for hardening scope.
+  - [x] 5.2 Phase 2 - Documentation and Reporting Closeout
+    - [x] 5.2.1 Step 1 - Final doc sync
+      - [x] 5.2.1.1 Task - Sync requirements, risk, retirement, and decision logs
+        - [x] 5.2.1.1.1 Sub-task - Ensure statuses are mutually consistent
+        - [x] 5.2.1.1.2 Sub-task - Link final evidence references
+        - Evidence: `04-requirements-traceability-matrix.md`, `12-risk-register-and-mitigations.md`, `14-legacy-retirement-ledger.md`, and `15-change-control-and-decision-log.md` synchronized with final P7/program closeout status.
+      - [x] 5.2.1.2 Task - Complete execution checklist closeout
+        - [x] 5.2.1.2.1 Sub-task - Mark all phase checklists complete
+        - [x] 5.2.1.2.2 Sub-task - Note any accepted exceptions with rationale
+        - Evidence: `docs/sidebar-rebuild/16-execution-checklists.md` includes final closeout record and completed checklist status.
+      - [x] 5.2.1.3 Task - Publish final reporting dashboard entry
+        - [x] 5.2.1.3.1 Sub-task - Publish final metrics snapshot
+        - [x] 5.2.1.3.2 Sub-task - Publish final blockers/issues disposition
+        - Evidence: `docs/sidebar-rebuild/17-reporting-dashboard-template.md` updated with final snapshot (gates/risks/defect status).
+    - [x] 5.2.2 Step 2 - Program closure
+      - [x] 5.2.2.1 Task - Confirm all gates (`G0`, `G1`, `P1`..`P7`) closed
+        - [x] 5.2.2.1.1 Sub-task - Verify closure entries in gate plan doc
+        - [x] 5.2.2.1.2 Sub-task - Verify gate approvals are logged
+        - Evidence: `docs/sidebar-rebuild/09-phase-plan-and-gates.md` now includes closure records for `G0`, `G1`, and `P1`..`P7`; approvals captured in decision log (`DEC-001`..`DEC-011`).
+      - [x] 5.2.2.2 Task - Confirm DoD criteria met
+        - [x] 5.2.2.2.1 Sub-task - Validate charter DoD checklist
+        - [x] 5.2.2.2.2 Sub-task - Validate acceptance suite completion
+        - Evidence: program DoD in `00-program-charter.md` satisfied by closed gate set + embedded acceptance matrix pass (`7/7` suites, `20/20` tests) + compile/build health.
+      - [x] 5.2.2.3 Task - Record final program sign-off
+        - [x] 5.2.2.3.1 Sub-task - Capture final sign-off record
+        - [x] 5.2.2.3.2 Sub-task - Archive final closure package
+        - Evidence: final sign-off captured in `docs/sidebar-rebuild/15-change-control-and-decision-log.md` (`DEC-011`).
+
+---
+
+## Evidence Notes (Optional)
+- Link completed item evidence directly under the relevant Task.
+- Example:
+  - Evidence: PR #123
+  - Evidence: Embedded validation run `YYYY-MM-DD`
+  - Evidence: Screenshot/video of mode switching behavior
+
+## Post-Closeout Stabilization Notes
+- 2026-02-13: Addressed CyberCommand embedded runtime instability causing repeated console spam (`Preference comparison`) and globe initialization degradation.
+  - Evidence: `src/components/HUD/Bars/CyberCommandTopBar/useTopBarPreferences.ts` updated to lazy-load preferences (`useState(() => loadPreferences())`) and remove render-path debug comparison logging.
+  - Evidence: `src/layouts/CyberCommandHUDLayout/CyberCommandHUDLayout.tsx` stabilized HUD subtree rendering by replacing inline component-function rendering with stable JSX content reference.
+  - Evidence: Terminal validation passes (`npx tsc --noEmit --project tsconfig.starcom.json`, `npm run build`).
+- 2026-02-13: Addressed globe-not-visible initialization stall in embedded CyberCommand runtime.
+  - Evidence: `src/context/GlobeLoadingContext.tsx` now exposes stable callback identities and memoized provider value to prevent effect re-trigger churn from changing function references.
+  - Evidence: `src/components/Globe/Globe.tsx` now includes initialization failsafe timeout to clear hidden loading state even when material polling is delayed.
+  - Evidence: Terminal validation passes (`npx tsc --noEmit --project tsconfig.starcom.json`, `npm run build`).
+- 2026-02-13: Fixed crash on right-rail "Open status popup" action.
+  - Evidence: `src/App.tsx` provider order corrected so `PopupProvider` is nested inside the main app context tree (`VisualizationModeProvider` and related providers), allowing popup components like `NOAAStatusPopup` to consume `useVisualizationMode` safely.
+  - Evidence: Terminal validation passes (`npx tsc --noEmit --project tsconfig.starcom.json`, `npm run build`).
+- 2026-02-13: Extracted National Territories into an independent toggle-able visualization overlay.
+  - Evidence: Added shared overlay toggle state (`src/context/VisualizationOverlayContext.tsx`, `src/context/VisualizationOverlayContextStore.ts`, `src/hooks/useVisualizationOverlay.ts`) and wired provider in `src/App.tsx`.
+  - Evidence: Added right-rail raw overlay toggle action (`src/components/HUD/Bars/CyberCommandRails/CyberCommandRightSideRail.tsx`, `CyberCommandRightSideRail.module.css`) with test coverage update (`src/components/HUD/Bars/CyberCommandRails/__tests__/CyberCommandRightSideRail.test.tsx`).
+  - Evidence: Decoupled overlay activation from strict GeoPolitical-only gate by enabling `useNationalTerritories3D` via global overlay toggle or GeoPolitical mode in `src/components/Globe/Globe.tsx`.
+  - Evidence: Terminal validation passes (`npx tsc --noEmit --project tsconfig.starcom.json`, `npm run build`).
+- 2026-02-13: Removed legacy auto-on behavior for National Territories overlay.
+  - Evidence: `src/components/Globe/Globe.tsx` now enables `useNationalTerritories3D` strictly from `nationalTerritoriesOverlayEnabled` (dedicated right-rail toggle) and no longer auto-enables from GeoPolitical mode.
+  - Evidence: Terminal validation passes (`npx tsc --noEmit --project tsconfig.starcom.json`, `npm run build`).
+- 2026-02-13: Rail visual polish and sizing pass for compact, toggle-first UX.
+  - Evidence: Left/right rails resized to compact half-width side-hugging containers and center offsets updated via layout tokens in `src/layouts/CyberCommandHUDLayout/CyberCommandHUDLayout.module.css`.
+  - Evidence: Left sub-rail converted to a free-floating compact shell with semi-transparent panel treatment in `src/components/HUD/Bars/CyberCommandRails/CyberCommandLeftSideSubRail.module.css`.
+  - Evidence: Rail button quality pass applied with opaque 1:1 square buttons, improved hover/active states, and clearer territories toggle ON/OFF affordance (`src/components/HUD/Bars/CyberCommandRails/CyberCommandLeftSideRail.module.css`, `src/components/HUD/Bars/CyberCommandRails/CyberCommandRightSideRail.module.css`, `src/components/HUD/Bars/CyberCommandRails/CyberCommandRightSideRail.tsx`).
+  - Evidence: Terminal validation passes (`npx tsc --noEmit --project tsconfig.starcom.json`, `npm run build`).
+- 2026-02-13: National Territories geometry alignment and draw quality update.
+  - Evidence: National Territories overlay radius increased by 1% (radius `101`) for borders, maritime lines, and territory fills in `src/geopolitical/services/NationalTerritoriesService.ts`.
+  - Evidence: Corrected +90°E longitude phase offset by applying a normalized longitude offset during geopolitical data decode/load paths in `src/geopolitical/services/NationalTerritoriesService.ts`.
+  - Evidence: Added 0.5s fade-in animation for territory sub-geometries at draw/rebuild time in `src/geopolitical/hooks/useNationalTerritories3D.ts`.
+  - Evidence: Terminal validation passes (`npx tsc --noEmit --project tsconfig.starcom.json`, `npm run build`).
+- 2026-02-13: National Territories geometry generation audit and polygon hardening pass.
+  - Evidence: Polar-ring detection in `src/geopolitical/geometry/polygonNormalize.ts` tightened to Antarctic-style southern-cap criteria, preventing false-positive polar classification on high-latitude northern polygons (e.g., Canada) that previously skipped dateline splitting.
+  - Evidence: Added regression coverage in `src/geopolitical/geometry/__tests__/polygonNormalize.test.ts` to ensure northern dateline-spanning rings classify as `split` (not `polar`).
+  - Evidence: Added degenerate-triangle filtering in `src/geopolitical/geometry/geometryFactory.ts` for tangent/lambert/projected triangulation outputs to prevent malformed cap faces from producing broken mesh patches.
+  - Evidence: Manual terminal geometry audits show post-fix normalization behavior and mesh quality improvement (`npx tsx -e ... normalizeOuterRingDetailed ...` => `polarIds: ["ATA"]`; `npx tsx -e ... GeometryFactory.buildTerritoryPolygons ...` => `degenerateTriangles: 0`), plus targeted test/build checks pass (`npx vitest run src/geopolitical/geometry/__tests__/polygonNormalize.test.ts`, `npx tsc --noEmit --project tsconfig.starcom.json`, `npm run build`).

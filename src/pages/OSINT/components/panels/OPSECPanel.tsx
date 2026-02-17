@@ -74,7 +74,8 @@ const OPSECPanel: React.FC<OPSECPanelProps> = ({ panelId }) => {
           title: 'Identity Refreshed',
           message: 'Your digital identity has been refreshed. New fingerprint generated.',
           severity: 'low',
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          action: 'Dismiss'
         }
       ]);
     }, 1500);
@@ -106,7 +107,8 @@ const OPSECPanel: React.FC<OPSECPanelProps> = ({ panelId }) => {
             title: 'Security Scan Complete',
             message: 'No threats detected. Your connection is secure.',
             severity: 'low',
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            action: 'Dismiss'
           }
         ]);
       }

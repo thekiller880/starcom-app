@@ -1,6 +1,7 @@
 // src/setupVitest.ts
 import '@testing-library/jest-dom'; // Import the package directly
-import { vi } from 'vitest';
+import { cleanup } from '@testing-library/react';
+import { afterEach, vi } from 'vitest';
 
 // Mock fetch globally with proper Response interface
 global.fetch = vi.fn().mockResolvedValue({
@@ -104,4 +105,25 @@ if (typeof (g as { ResizeObserver?: unknown }).ResizeObserver === 'undefined') {
   }
   Object.defineProperty(g, 'ResizeObserver', { value: RO as unknown as ResizeObserverType, writable: true, configurable: true });
 }
+
+afterEach(() => {
+  cleanup();
+
+  try {
+    vi.runOnlyPendingTimers();
+  } catch {
+    // Ignore when fake timers are not active
+  }
+
+  vi.useRealTimers();
+  vi.clearAllMocks();
+  vi.restoreAllMocks();
+
+  try {
+    window.localStorage?.clear();
+    window.sessionStorage?.clear();
+  } catch {
+    // Ignore storage clear failures in non-standard envs
+  }
+});
 

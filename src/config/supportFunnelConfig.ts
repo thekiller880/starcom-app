@@ -1,5 +1,7 @@
 import { DebugCategory, debugLogger } from '../utils/debugLogger';
 
+const SUPPORT_FUNDRAISER_URL = 'https://gofund.me/d8575cf83';
+
 export type SupportFunnelConfig = {
   enabled: boolean;
   fundraiserUrl: string;
@@ -30,23 +32,24 @@ function isProd(): boolean {
   }
 }
 
-function appendSourceTag(url: string, source = 'app_modal'): string {
-  if (!url) return url;
-  try {
-    const hasQuery = url.includes('?');
-    const separator = hasQuery ? '&' : '?';
-    if (url.includes('src=')) return url;
-    return `${url}${separator}src=${source}`;
-  } catch {
-    return url;
+function sanitizeFundraiserUrl(url: string | undefined): string {
+  const candidate = (url || '').trim();
+  if (!candidate) {
+    return SUPPORT_FUNDRAISER_URL;
   }
+
+  const lower = candidate.toLowerCase();
+  if (lower.includes('fund.starcom.app')) {
+    return SUPPORT_FUNDRAISER_URL;
+  }
+
+  return candidate;
 }
 
 export function getSupportFunnelConfig(): SupportFunnelConfig {
   const envEnabled = getEnvFlag('VITE_SUPPORT_FUNNEL_ENABLED');
   const envSnooze = getEnvFlag('VITE_SUPPORT_FUNNEL_SNOOZE_DAYS');
   const envFundUrl = getEnvFlag('VITE_SUPPORT_FUNNEL_FUND_URL');
-  const envFundUrlStage = getEnvFlag('VITE_SUPPORT_FUNNEL_FUND_URL_STAGE');
   const envNostrUrl = getEnvFlag('VITE_SUPPORT_FUNNEL_NOSTR_URL');
   const envInviteCopy = getEnvFlag('VITE_SUPPORT_FUNNEL_INVITE_COPY');
   const envExperimentEnabled = getEnvFlag('VITE_SUPPORT_FUNNEL_EXPERIMENT_ENABLED');
@@ -55,8 +58,7 @@ export function getSupportFunnelConfig(): SupportFunnelConfig {
 
   const prod = isProd();
 
-  const defaultFundraiser = prod ? 'https://fund.starcom.app' : 'https://stage.fund.starcom.app';
-  const fundraiserUrl = appendSourceTag(envFundUrl || (prod ? envFundUrlStage || defaultFundraiser : envFundUrlStage || defaultFundraiser));
+  const fundraiserUrl = sanitizeFundraiserUrl(envFundUrl);
 
   const nostrUrl = envNostrUrl || 'https://navcom.app/ops/starcom';
   const inviteCopy = envInviteCopy || 'https://navcom.app/ops/starcom';

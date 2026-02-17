@@ -1,11 +1,9 @@
 // CyberCommandMarquee.tsx
 // PARADIGM SHIFT: Use AnimationEngine instead of React state for 60fps animations
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { MarqueeDataPoint } from './interfaces';
 import styles from './CyberCommandMarquee.module.css';
 import { useAnimation } from '../../../../core/AnimationEngine';
-
-const SCROLL_SPEED = 1; // px per frame
 
 // Props interface for the marquee component
 interface CyberCommandMarqueeProps {
@@ -15,9 +13,9 @@ interface CyberCommandMarqueeProps {
   dataAvailability?: Record<string, boolean>;
   isDraggable?: boolean;
   onDataPointClick?: (dataPoint: MarqueeDataPoint) => void;
-  onDataPointHover?: (dataPoint: MarqueeDataPoint) => void;
+  onDataPointHover?: (dataPoint: MarqueeDataPoint | null) => void;
   customClassName?: string;
-  onOpenSettings?: () => void;
+  onOpenSettings?: (dataPointId?: string) => void;
 }
 
 // Seamless infinite marquee component
@@ -32,12 +30,40 @@ const CyberCommandMarquee: React.FC<CyberCommandMarqueeProps> = ({
   customClassName,
   onOpenSettings // Add this prop to open settings
 }) => {
+  const isMobile = useMemo(() => {
+    if (typeof navigator === 'undefined') {
+      return false;
+    }
+    return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  }, []);
+
+  const targetFrameMs = isMobile ? 50 : 33;
+  const scrollSpeedPxPerSecond = isMobile ? 20 : 30;
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const contentWidthRef = useRef<number>(0);
+  const animationIdRef = useRef(`marquee-scroll-${Math.random().toString(36).slice(2)}`);
+  const frameAccumulatorRef = useRef<number>(0);
   
   // PARADIGM SHIFT: Animation values stored in refs, not React state
   const offsetRef = useRef<number>(0);
+  const isHoveredRef = useRef(false);
+  const hasActuallyDraggedRef = useRef(false);
+
+  const applyTransformForOffset = useCallback((offset: number) => {
+    if (!contentRef.current) {
+      return;
+    }
+
+    if (contentWidthRef.current <= 0) {
+      contentRef.current.style.transform = 'translateX(0px)';
+      return;
+    }
+
+    const normalizedOffset = ((offset % contentWidthRef.current) + contentWidthRef.current) % contentWidthRef.current;
+    const translateX = -contentWidthRef.current + normalizedOffset;
+    contentRef.current.style.transform = `translateX(${translateX}px)`;
+  }, []);
   
   // React state ONLY for discrete UI changes (not 60fps updates)
   const [isDragging, setIsDragging] = useState(false);
@@ -47,16 +73,24 @@ const CyberCommandMarquee: React.FC<CyberCommandMarqueeProps> = ({
 
   // PARADIGM SHIFT: Use AnimationEngine instead of useEffect + requestAnimationFrame
   useAnimation(
-    'marquee-scroll',
-    (_deltaTime: number) => {
+    animationIdRef.current,
+    (deltaTime: number) => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
+
+      frameAccumulatorRef.current += deltaTime;
+      if (frameAccumulatorRef.current < targetFrameMs) {
+        return;
+      }
+      const elapsedMs = frameAccumulatorRef.current;
+      frameAccumulatorRef.current = 0;
+
       // Only animate if not dragging or hovering
-      if (!hasActuallyDragged && !isHovered && contentWidthRef.current > 0) {
-        offsetRef.current -= SCROLL_SPEED;
-        
-        // Direct DOM manipulation - NO React state updates
-        if (contentRef.current) {
-          contentRef.current.style.transform = `translateX(${offsetRef.current}px)`;
-        }
+      if (!hasActuallyDraggedRef.current && !isHoveredRef.current && contentWidthRef.current > 0) {
+        const distancePx = (elapsedMs / 1000) * scrollSpeedPxPerSecond;
+        offsetRef.current -= distancePx;
+        applyTransformForOffset(offsetRef.current);
       }
     },
     5 // High priority for smooth scrolling
@@ -72,6 +106,7 @@ const CyberCommandMarquee: React.FC<CyberCommandMarqueeProps> = ({
         // We render 3 copies, so divide by 3 to get single set width
         const singleSetWidth = contentRef.current.scrollWidth / 3;
         contentWidthRef.current = singleSetWidth; // Use ref instead of setState
+        applyTransformForOffset(offsetRef.current);
       }
     };
 
@@ -90,6 +125,7 @@ const CyberCommandMarquee: React.FC<CyberCommandMarqueeProps> = ({
     // Don't prevent default immediately - let clicks work
     setIsDragging(true);
     setHasActuallyDragged(false);
+    hasActuallyDraggedRef.current = false;
     setDragStart({ x: e.clientX, y: e.clientY, offset: offsetRef.current });
   };
 
@@ -99,6 +135,7 @@ const CyberCommandMarquee: React.FC<CyberCommandMarqueeProps> = ({
     e.preventDefault();
     setIsDragging(true);
     setHasActuallyDragged(false);
+    hasActuallyDraggedRef.current = false;
     setDragStart({ x: e.touches[0].clientX, y: e.touches[0].clientY, offset: offsetRef.current });
   };
 
@@ -115,14 +152,12 @@ const CyberCommandMarquee: React.FC<CyberCommandMarqueeProps> = ({
       if (distance > DRAG_THRESHOLD) {
         if (!hasActuallyDragged) {
           setHasActuallyDragged(true);
+          hasActuallyDraggedRef.current = true;
           e.preventDefault(); // Now we can prevent default
         }
         const newOffset = dragStart.offset + deltaX;
         offsetRef.current = newOffset;
-        // Direct DOM update - no React state
-        if (contentRef.current) {
-          contentRef.current.style.transform = `translateX(${newOffset}px)`;
-        }
+        applyTransformForOffset(newOffset);
       }
     };
 
@@ -134,6 +169,7 @@ const CyberCommandMarquee: React.FC<CyberCommandMarqueeProps> = ({
       }
       setIsDragging(false);
       setHasActuallyDragged(false);
+      hasActuallyDraggedRef.current = false;
     };
 
     const handleTouchMove = (e: TouchEvent) => {
@@ -145,14 +181,12 @@ const CyberCommandMarquee: React.FC<CyberCommandMarqueeProps> = ({
         if (distance > DRAG_THRESHOLD) {
           if (!hasActuallyDragged) {
             setHasActuallyDragged(true);
+            hasActuallyDraggedRef.current = true;
             e.preventDefault();
           }
           const newOffset = dragStart.offset + deltaX;
           offsetRef.current = newOffset;
-          // Direct DOM update - no React state
-          if (contentRef.current) {
-            contentRef.current.style.transform = `translateX(${newOffset}px)`;
-          }
+          applyTransformForOffset(newOffset);
         }
       }
     };
@@ -164,6 +198,7 @@ const CyberCommandMarquee: React.FC<CyberCommandMarqueeProps> = ({
       }
       setIsDragging(false);
       setHasActuallyDragged(false);
+      hasActuallyDraggedRef.current = false;
     };
 
     // Add global listeners
@@ -179,19 +214,6 @@ const CyberCommandMarquee: React.FC<CyberCommandMarqueeProps> = ({
       document.removeEventListener('touchend', handleTouchEnd);
     };
   }, [isDragging, dragStart, hasActuallyDragged, DRAG_THRESHOLD]);
-
-  // Calculate the final transform with seamless looping
-  // The key insight: use modulo to create seamless infinite scrolling
-  const getTransform = () => {
-    if (contentWidthRef.current <= 0) return 'translateX(0px)';
-    
-    // Normalize offset to always be within one content width cycle
-    // This creates seamless infinite scrolling without visible resets
-    const normalizedOffset = ((offsetRef.current % contentWidthRef.current) + contentWidthRef.current) % contentWidthRef.current;
-    
-    // Apply offset to the second copy (middle copy) so content appears continuous
-    return `translateX(${-contentWidthRef.current + normalizedOffset}px)`;
-  };
 
   // Render data point
   const renderDataPoint = (dataPoint: MarqueeDataPoint, index: number, copyIndex: number) => {
@@ -241,11 +263,7 @@ const CyberCommandMarquee: React.FC<CyberCommandMarqueeProps> = ({
   const openDataPointSettings = (dataPointId: string) => {
     // Use the callback prop to open settings with the specific data point
     if (onOpenSettings) {
-      onOpenSettings();
-    } else {
-      // Fallback for development/testing
-      console.log(`Opening settings for data point: ${dataPointId}`);
-      alert(`Opening settings for: ${dataPointId}`);
+      onOpenSettings(dataPointId);
     }
   };
 
@@ -284,14 +302,20 @@ const CyberCommandMarquee: React.FC<CyberCommandMarqueeProps> = ({
       className={`${styles.marquee} ${customClassName || ''} ${hasActuallyDragged ? styles.marqueeDragging : ''}`}
       onMouseDown={handleMouseDown}
       onTouchStart={handleTouchStart}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={() => {
+        setIsHovered(true);
+        isHoveredRef.current = true;
+      }}
+      onMouseLeave={() => {
+        setIsHovered(false);
+        isHoveredRef.current = false;
+      }}
     >
       <div 
         ref={contentRef}
         className={styles.marqueeContent}
         style={{ 
-          transform: getTransform(),
+          transform: 'translateX(0px)',
           cursor: isDraggable ? (hasActuallyDragged ? 'grabbing' : 'grab') : 'default'
         }}
       >

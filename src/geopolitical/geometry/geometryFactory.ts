@@ -187,15 +187,16 @@ export const GeometryFactory: GeometryFactoryType = {
               });
             }
         } else {
+          const outerLegacy = sanitizeRingForTriangulation(outerPart);
+          if (outerLegacy.length < 3) return;
           const shapePoints2D: THREE.Vector2[] = [];
-          outerPart.forEach(([lng, lat]) => { shapePoints2D.push(new THREE.Vector2(lng, lat)); });
+          outerLegacy.forEach(([lng, lat]) => { shapePoints2D.push(new THREE.Vector2(lng, lat)); });
           correctWinding(shapePoints2D, /*wantCCW*/ true);
           const shape = new THREE.Shape(shapePoints2D);
           const partHoles = holesPerPart[partIdx];
           for (let i = 0; i < partHoles.length; i++) {
-            let hole = partHoles[i];
+            let hole = sanitizeRingForTriangulation(partHoles[i]);
             if (hole.length < 3) continue;
-            hole = unwrapRing(hole);
             const path = new THREE.Path();
             const holePts: THREE.Vector2[] = [];
             hole.forEach(([lng, lat]) => { holePts.push(new THREE.Vector2(lng, lat)); });
@@ -440,6 +441,46 @@ function unwrapRing(ring: [number, number][]): [number, number][] {
   return result;
 }
 
+function isClosedRing(ring: [number, number][]): boolean {
+  if (ring.length < 2) return false;
+  const first = ring[0];
+  const last = ring[ring.length - 1];
+  return first[0] === last[0] && first[1] === last[1];
+}
+
+function removeClosingVertex(ring: [number, number][]): [number, number][] {
+  if (!isClosedRing(ring)) return ring.slice();
+  return ring.slice(0, ring.length - 1);
+}
+
+function rotateRing(ring: [number, number][], startIdx: number): [number, number][] {
+  if (!ring.length) return ring;
+  const n = ring.length;
+  const s = ((startIdx % n) + n) % n;
+  if (s === 0) return ring.slice();
+  return [...ring.slice(s), ...ring.slice(0, s)];
+}
+
+function sanitizeRingForTriangulation(ring: [number, number][]): [number, number][] {
+  if (ring.length < 3) return [];
+  const val = validateRing(ring);
+  const open = removeClosingVertex(val.ring);
+  if (open.length < 3) return [];
+  let maxJump = -1;
+  let maxJumpEdgeIndex = -1;
+  for (let i = 0; i < open.length; i++) {
+    const a = open[i][0];
+    const b = open[(i + 1) % open.length][0];
+    const d = Math.abs(b - a);
+    if (d > maxJump) {
+      maxJump = d;
+      maxJumpEdgeIndex = i;
+    }
+  }
+  const rotated = maxJumpEdgeIndex >= 0 ? rotateRing(open, maxJumpEdgeIndex + 1) : open;
+  return unwrapRing(rotated);
+}
+
 // Compute signed area in the current lat/lon 2D projection (simple planar area).
 function signedArea(pts: THREE.Vector2[]): number {
   let area = 0;
@@ -481,9 +522,10 @@ function assignHolesToParts(outerParts: [number,number][][], holes: [number,numb
     // If hole crosses dateline, split into sub-parts and treat each independently.
     const holeParts = splitHoleAtDateline(holeOriginal);
     holeParts.forEach(hole => {
-    // Choose a test point: first vertex
-    const [testLngRaw, testLat] = hole[0];
+    const samplePoint = pickRepresentativePoint(hole);
+    const [testLngRaw, testLat] = samplePoint;
     let bestPart = -1;
+    let bestContainmentVotes = -1;
     for (let pi = 0; pi < partData.length; pi++) {
       const pd = partData[pi];
       // Adjust test longitude into same domain as part by adding multiples of 360 if needed (pick variant with minimal distance to part bbox center)
@@ -493,16 +535,75 @@ function assignHolesToParts(outerParts: [number,number][][], holes: [number,numb
       if (delta > 180) testLng -= 360; else if (delta < -180) testLng += 360;
       // Quick bbox reject with small tolerance
       if (testLng < pd.minLng - 1 || testLng > pd.maxLng + 1 || testLat < pd.minLat - 1 || testLat > pd.maxLat + 1) continue;
-      if (pointInRing(testLng, testLat, pd.unwrapped)) { bestPart = pi; break; }
+      const votes = countSamplePointsInside(hole, pd.unwrapped, centerLng);
+      if (votes > bestContainmentVotes) {
+        bestContainmentVotes = votes;
+        bestPart = pi;
+      }
+      if (votes > 0) break;
     }
-      if (bestPart >= 0) per[bestPart].push(hole);
+      if (bestPart >= 0 && bestContainmentVotes > 0) per[bestPart].push(hole);
       else {
-        // Fallback: attach to first part to ensure hole is not lost.
-        per[0].push(hole);
+        // Fallback: attach to nearest part by representative-point to bbox-center distance.
+        const nearest = nearestPartIndex(partData, samplePoint);
+        if (nearest >= 0) per[nearest].push(hole);
       }
     });
   });
   return per;
+}
+
+function pickRepresentativePoint(ring: [number,number][]): [number,number] {
+  if (!ring.length) return [0, 0];
+  const closed = ring.length > 2 && ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1];
+  const pts = closed ? ring.slice(0, -1) : ring;
+  let sumLng = 0;
+  let sumLat = 0;
+  pts.forEach(([lng, lat]) => {
+    sumLng += lng;
+    sumLat += lat;
+  });
+  return [sumLng / pts.length, sumLat / pts.length];
+}
+
+function countSamplePointsInside(hole: [number,number][], partRingUnwrapped: [number,number][], partCenterLng: number): number {
+  if (hole.length < 3) return 0;
+  const sampleCount = Math.min(6, hole.length);
+  const stride = Math.max(1, Math.floor(hole.length / sampleCount));
+  let inside = 0;
+  for (let i = 0; i < hole.length; i += stride) {
+    const [rawLng, lat] = hole[i];
+    let lng = rawLng;
+    const delta = lng - partCenterLng;
+    if (delta > 180) lng -= 360;
+    else if (delta < -180) lng += 360;
+    if (pointInRing(lng, lat, partRingUnwrapped)) inside++;
+  }
+  return inside;
+}
+
+function nearestPartIndex(partData: Array<{ minLng: number; maxLng: number; minLat: number; maxLat: number }>, point: [number,number]): number {
+  if (!partData.length) return -1;
+  const [rawLng, lat] = point;
+  let best = 0;
+  let bestDist = Infinity;
+  for (let i = 0; i < partData.length; i++) {
+    const pd = partData[i];
+    const centerLng = (pd.minLng + pd.maxLng) / 2;
+    const centerLat = (pd.minLat + pd.maxLat) / 2;
+    let lng = rawLng;
+    const delta = lng - centerLng;
+    if (delta > 180) lng -= 360;
+    else if (delta < -180) lng += 360;
+    const dLng = lng - centerLng;
+    const dLat = lat - centerLat;
+    const dist2 = dLng * dLng + dLat * dLat;
+    if (dist2 < bestDist) {
+      bestDist = dist2;
+      best = i;
+    }
+  }
+  return best;
 }
 
 function pointInRing(x: number, y: number, ring: [number,number][]): boolean {
@@ -531,10 +632,10 @@ function splitHoleAtDateline(ring: [number,number][]): [number,number][][] {
     current.push(a);
     const d = b[0]-a[0];
     if (d > 180 || d < -180) {
-      const seamLon = d > 180 ? 180 : -180;
-      const t = (seamLon - a[0]) / (b[0]-a[0]);
-      const lat = a[1] + t * (b[1]-a[1]);
-      const seam: [number,number] = [seamLon, lat];
+      const seam = computeDatelineIntersectionPoint(a, b);
+      if (!seam) {
+        continue;
+      }
       current.push(seam);
       commit();
       current.push(seam);
@@ -544,28 +645,93 @@ function splitHoleAtDateline(ring: [number,number][]): [number,number][][] {
   return parts.length ? parts : [ring];
 }
 
+function collectEdgeLengthsFromFaces(faces: number[][], vertices: THREE.Vector2[]): number[] {
+  const lengths: number[] = [];
+  for (let i = 0; i < faces.length; i++) {
+    const tri = faces[i];
+    const a = vertices[tri[0]];
+    const b = vertices[tri[1]];
+    const c = vertices[tri[2]];
+    if (!a || !b || !c) continue;
+    lengths.push(a.distanceTo(b), b.distanceTo(c), c.distanceTo(a));
+  }
+  return lengths;
+}
+
+function filterPathologicalFaces(faces: number[][], vertices: THREE.Vector2[], maxEdgeToMedianRatio = 16): number[][] {
+  if (!faces.length) return faces;
+  const lengths = collectEdgeLengthsFromFaces(faces, vertices);
+  if (!lengths.length) return faces;
+  lengths.sort((x, y) => x - y);
+  const median = lengths[Math.floor(lengths.length / 2)] || 1;
+  const threshold = median * maxEdgeToMedianRatio;
+  const filtered: number[][] = [];
+  for (let i = 0; i < faces.length; i++) {
+    const tri = faces[i];
+    const a = vertices[tri[0]];
+    const b = vertices[tri[1]];
+    const c = vertices[tri[2]];
+    if (!a || !b || !c) continue;
+    const maxEdge = Math.max(a.distanceTo(b), b.distanceTo(c), c.distanceTo(a));
+    if (maxEdge <= threshold) filtered.push(tri);
+  }
+  return filtered;
+}
+
+function computeDatelineIntersectionPoint(a: [number, number], b: [number, number]): [number, number] | null {
+  let lonA = normalizeLon180(a[0]);
+  let lonB = normalizeLon180(b[0]);
+  const delta = lonB - lonA;
+  if (!(delta > 180 || delta < -180)) return null;
+
+  const seamLon = delta > 180 ? -180 : 180;
+  if (delta > 180) lonB -= 360;
+  else if (delta < -180) lonB += 360;
+
+  const denom = lonB - lonA;
+  if (Math.abs(denom) < 1e-12) return null;
+
+  const t = (seamLon - lonA) / denom;
+  const clampedT = Math.max(0, Math.min(1, t));
+  const lat = a[1] + clampedT * (b[1] - a[1]);
+  return [seamLon, lat];
+}
+
+function normalizeLon180(lon: number): number {
+  let out = lon;
+  while (out > 180) out -= 360;
+  while (out < -180) out += 360;
+  return out;
+}
+
 // Build flat (non-extruded) polygon geometry using tangent plane projection.
 function buildFlatPolygonTangent(outer: [number,number][], holeRings: [number,number][][], opts: { radius: number; elevation: number }): THREE.BufferGeometry {
   const { radius, elevation } = opts;
+  const outerClean = sanitizeRingForTriangulation(outer);
+  if (outerClean.length < 3) return new THREE.BufferGeometry();
+  const cleanedHoles = holeRings
+    .map(r => sanitizeRingForTriangulation(r))
+    .filter(r => r.length >= 3);
   // Collect all points (outer first, then each hole ring sequentially) for shared projection basis.
   const allPoints: { lon: number; lat: number }[] = [];
-  outer.forEach(([lng, lat]) => allPoints.push({ lon: lng, lat }));
+  outerClean.forEach(([lng, lat]) => allPoints.push({ lon: lng, lat }));
   const holeStartIndices: number[] = []; // starting index in allPoints for each hole
-  holeRings.forEach(r => {
+  cleanedHoles.forEach(r => {
     holeStartIndices.push(allPoints.length);
     r.forEach(([lng, lat]) => allPoints.push({ lon: lng, lat }));
   });
   const proj = projectToTangentPlane(allPoints);
   // Re-slice into rings of Vector2 using projected (x,y)
   const outer2D: THREE.Vector2[] = [];
-  for (let i = 0; i < outer.length; i++) {
+  for (let i = 0; i < outerClean.length; i++) {
     const p = proj.points2D[i];
     outer2D.push(new THREE.Vector2(p.x, p.y));
   }
   correctWinding(outer2D, true);
   const holes2D: THREE.Vector2[][] = [];
-  for (let h = 0; h < holeRings.length; h++) {
-    const ring = holeRings[h];
+  const activeHoles: Array<{ ring: [number, number][]; start: number }> = [];
+  for (let h = 0; h < cleanedHoles.length; h++) {
+    const ring = cleanedHoles[h];
     if (ring.length < 3) continue;
     const start = holeStartIndices[h];
     const pts: THREE.Vector2[] = [];
@@ -575,11 +741,15 @@ function buildFlatPolygonTangent(outer: [number,number][], holeRings: [number,nu
     }
     correctWinding(pts, false);
     holes2D.push(pts);
+    activeHoles.push({ ring, start });
   }
   // Triangulate
   const faces = THREE.ShapeUtils.triangulateShape(outer2D, holes2D);
+  const all2DVertices: THREE.Vector2[] = [...outer2D, ...holes2D.flat()];
+  const nonDegenerateFaces = faces.filter((tri) => !isDegenerateFace(tri, all2DVertices));
+  const filteredFaces = filterPathologicalFaces(nonDegenerateFaces, all2DVertices);
   // Build vertex array (each unique vertex once: outer + holes) and map to sphere positions directly
-  const totalVerts = outer2D.length + holes2D.reduce((acc, r) => acc + r.length, 0);
+  const totalVerts = outer2D.length + activeHoles.reduce((acc, h) => acc + h.ring.length, 0);
   const positions = new Float32Array(totalVerts * 3);
   let writeIndex = 0;
   // Helper to write a vertex from original lat/lon at index in proj.points2D
@@ -590,16 +760,15 @@ function buildFlatPolygonTangent(outer: [number,number][], holeRings: [number,nu
     positions[targetIndex*3+1] = v3.y;
     positions[targetIndex*3+2] = -v3.z; // flip Z
   };
-  for (let i = 0; i < outer.length; i++) writeVertex(i, writeIndex++);
-  const _outerVertexCount = outer.length; // retained for future hole mapping extensions
-  for (let h = 0; h < holeRings.length; h++) {
-    const ring = holeRings[h];
-    const start = holeStartIndices[h];
+  for (let i = 0; i < outerClean.length; i++) writeVertex(i, writeIndex++);
+  for (let h = 0; h < activeHoles.length; h++) {
+    const ring = activeHoles[h].ring;
+    const start = activeHoles[h].start;
     for (let i = 0; i < ring.length; i++) writeVertex(start + i, writeIndex++);
   }
   // Build index buffer (faces reference indices relative to concatenated rings)
   const indices: number[] = [];
-  faces.forEach(tri => { indices.push(tri[0], tri[1], tri[2]); });
+  filteredFaces.forEach(tri => { indices.push(tri[0], tri[1], tri[2]); });
   const geom = new THREE.BufferGeometry();
   geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geom.setIndex(indices);
@@ -610,23 +779,32 @@ function buildFlatPolygonTangent(outer: [number,number][], holeRings: [number,nu
 // Lambert azimuthal equal-area (approx) projection variant for polar features.
 function buildFlatPolygonLambert(outer: [number,number][], holeRings: [number,number][][], opts: { radius: number; elevation: number }): THREE.BufferGeometry {
   const { radius, elevation } = opts;
+  const outerClean = sanitizeRingForTriangulation(outer);
+  if (outerClean.length < 3) return new THREE.BufferGeometry();
+  const cleanedHoles = holeRings
+    .map(r => sanitizeRingForTriangulation(r))
+    .filter(r => r.length >= 3);
   const allPoints: { lon: number; lat: number }[] = [];
-  outer.forEach(([lng, lat]) => allPoints.push({ lon: lng, lat }));
+  outerClean.forEach(([lng, lat]) => allPoints.push({ lon: lng, lat }));
   const holeStart: number[] = [];
-  holeRings.forEach(r => { holeStart.push(allPoints.length); r.forEach(([lng, lat]) => allPoints.push({ lon: lng, lat })); });
+  cleanedHoles.forEach(r => { holeStart.push(allPoints.length); r.forEach(([lng, lat]) => allPoints.push({ lon: lng, lat })); });
   const proj = projectPolarLambert(allPoints);
   const outer2D: THREE.Vector2[] = [];
-  for (let i = 0; i < outer.length; i++) { const p = proj.points2D[i]; outer2D.push(new THREE.Vector2(p.x, p.y)); }
+  for (let i = 0; i < outerClean.length; i++) { const p = proj.points2D[i]; outer2D.push(new THREE.Vector2(p.x, p.y)); }
   correctWinding(outer2D, true);
   const holes2D: THREE.Vector2[][] = [];
-  for (let h = 0; h < holeRings.length; h++) {
-    const ring = holeRings[h]; if (ring.length < 3) continue;
+  const activeHoles: Array<{ ring: [number, number][]; start: number }> = [];
+  for (let h = 0; h < cleanedHoles.length; h++) {
+    const ring = cleanedHoles[h]; if (ring.length < 3) continue;
     const start = holeStart[h]; const pts: THREE.Vector2[] = [];
     for (let i = 0; i < ring.length; i++) { const p = proj.points2D[start + i]; pts.push(new THREE.Vector2(p.x, p.y)); }
-    correctWinding(pts, false); holes2D.push(pts);
+    correctWinding(pts, false); holes2D.push(pts); activeHoles.push({ ring, start });
   }
   const faces = THREE.ShapeUtils.triangulateShape(outer2D, holes2D);
-  const totalVerts = outer2D.length + holes2D.reduce((a, r) => a + r.length, 0);
+  const all2DVertices: THREE.Vector2[] = [...outer2D, ...holes2D.flat()];
+  const nonDegenerateFaces = faces.filter((tri) => !isDegenerateFace(tri, all2DVertices));
+  const filteredFaces = filterPathologicalFaces(nonDegenerateFaces, all2DVertices);
+  const totalVerts = outer2D.length + activeHoles.reduce((a, h) => a + h.ring.length, 0);
   const positions = new Float32Array(totalVerts * 3);
   let writeIndex = 0;
   const writeVertex = (globalIdx: number, targetIndex: number) => {
@@ -634,13 +812,13 @@ function buildFlatPolygonLambert(outer: [number,number][], holeRings: [number,nu
     const v3 = latLonToVector3(p.lat, p.lon, { radius, elevation, invertX: false });
     positions[targetIndex*3] = v3.x; positions[targetIndex*3+1] = v3.y; positions[targetIndex*3+2] = -v3.z;
   };
-  for (let i = 0; i < outer.length; i++) writeVertex(i, writeIndex++);
-  for (let h = 0; h < holeRings.length; h++) {
-    const ring = holeRings[h]; const start = holeStart[h];
+  for (let i = 0; i < outerClean.length; i++) writeVertex(i, writeIndex++);
+  for (let h = 0; h < activeHoles.length; h++) {
+    const ring = activeHoles[h].ring; const start = activeHoles[h].start;
     for (let i = 0; i < ring.length; i++) writeVertex(start + i, writeIndex++);
   }
   const indices: number[] = [];
-  faces.forEach(tri => indices.push(tri[0], tri[1], tri[2]));
+  filteredFaces.forEach(tri => indices.push(tri[0], tri[1], tri[2]));
   const geom = new THREE.BufferGeometry();
   geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geom.setIndex(indices);
@@ -652,22 +830,31 @@ function buildFlatPolygonLambert(outer: [number,number][], holeRings: [number,nu
 interface ProjectedExtrudeOptions { radius: number; baseElevation: number; thickness: number; mode: 'tangent' | 'lambert'; }
 function buildProjectedExtrudedPolygon(outer: [number,number][], holeRings: [number,number][][], opts: ProjectedExtrudeOptions): THREE.BufferGeometry {
   const { radius, baseElevation, thickness, mode } = opts;
+  const outerClean = sanitizeRingForTriangulation(outer);
+  if (outerClean.length < 3) return new THREE.BufferGeometry();
+  const cleanedHoles = holeRings
+    .map(r => sanitizeRingForTriangulation(r))
+    .filter(r => r.length >= 3);
   const allPoints: { lon: number; lat: number }[] = [];
-  outer.forEach(([lng, lat]) => allPoints.push({ lon: lng, lat }));
+  outerClean.forEach(([lng, lat]) => allPoints.push({ lon: lng, lat }));
   const holeStarts: number[] = [];
-  holeRings.forEach(r => { holeStarts.push(allPoints.length); r.forEach(([lng, lat]) => allPoints.push({ lon: lng, lat })); });
+  cleanedHoles.forEach(r => { holeStarts.push(allPoints.length); r.forEach(([lng, lat]) => allPoints.push({ lon: lng, lat })); });
   const proj = mode === 'tangent' ? projectToTangentPlane(allPoints) : projectPolarLambert(allPoints);
   const outer2D: THREE.Vector2[] = [];
-  for (let i=0;i<outer.length;i++){ const p=proj.points2D[i]; outer2D.push(new THREE.Vector2(p.x,p.y)); }
+  for (let i=0;i<outerClean.length;i++){ const p=proj.points2D[i]; outer2D.push(new THREE.Vector2(p.x,p.y)); }
   correctWinding(outer2D, true);
   const holes2D: THREE.Vector2[][] = [];
-  for (let h=0; h<holeRings.length; h++) {
-    const ring = holeRings[h]; if (ring.length < 3) continue; const start = holeStarts[h]; const pts: THREE.Vector2[] = [];
+  const activeHoles: Array<{ ring: [number, number][]; start: number }> = [];
+  for (let h=0; h<cleanedHoles.length; h++) {
+    const ring = cleanedHoles[h]; if (ring.length < 3) continue; const start = holeStarts[h]; const pts: THREE.Vector2[] = [];
     for (let i=0;i<ring.length;i++){ const p=proj.points2D[start+i]; pts.push(new THREE.Vector2(p.x,p.y)); }
-    correctWinding(pts,false); holes2D.push(pts);
+    correctWinding(pts,false); holes2D.push(pts); activeHoles.push({ ring, start });
   }
   const faces = THREE.ShapeUtils.triangulateShape(outer2D, holes2D);
-  const bottomCount = outer2D.length + holes2D.reduce((a,r)=>a+r.length,0);
+  const all2DVertices: THREE.Vector2[] = [...outer2D, ...holes2D.flat()];
+  const nonDegenerateFaces = faces.filter((tri) => !isDegenerateFace(tri, all2DVertices));
+  const filteredFaces = filterPathologicalFaces(nonDegenerateFaces, all2DVertices);
+  const bottomCount = outer2D.length + activeHoles.reduce((a,h)=>a+h.ring.length,0);
   const totalVerts = bottomCount * 2; // bottom + top duplicate
   const positions = new Float32Array(totalVerts * 3);
   const writeVertex = (globalIdx: number, target: number, elev: number) => {
@@ -677,20 +864,20 @@ function buildProjectedExtrudedPolygon(outer: [number,number][], holeRings: [num
   };
   // Bottom
   let cursor = 0;
-  for (let i=0;i<outer.length;i++) writeVertex(i, cursor++, baseElevation);
-  for (let h=0; h<holeRings.length; h++) {
-    const ring = holeRings[h]; const start = holeStarts[h];
+  for (let i=0;i<outerClean.length;i++) writeVertex(i, cursor++, baseElevation);
+  for (let h=0; h<activeHoles.length; h++) {
+    const ring = activeHoles[h].ring; const start = activeHoles[h].start;
     for (let i=0;i<ring.length;i++) writeVertex(start+i, cursor++, baseElevation);
   }
   // Top
   for (let i=0;i<bottomCount;i++) writeVertex(i, bottomCount + i, baseElevation + thickness);
   const indices: number[] = [];
   // Bottom faces
-  faces.forEach(tri => indices.push(tri[0], tri[1], tri[2]));
+  filteredFaces.forEach(tri => indices.push(tri[0], tri[1], tri[2]));
   // Top faces (reverse winding)
-  faces.forEach(tri => indices.push(bottomCount + tri[2], bottomCount + tri[1], bottomCount + tri[0]));
+  filteredFaces.forEach(tri => indices.push(bottomCount + tri[2], bottomCount + tri[1], bottomCount + tri[0]));
   // Outer side walls only (holes ignored for side surfaces for now; could add later)
-  const outerLen = outer.length;
+  const outerLen = outerClean.length;
   for (let i=0;i<outerLen;i++) {
     const a = i;
     const b = (i+1)%outerLen;
@@ -702,9 +889,9 @@ function buildProjectedExtrudedPolygon(outer: [number,number][], holeRings: [num
   // Hole rings were written sequentially after outer in same order as holeRings.
   // We rely on their original winding (we forced CW for triangulation). We invert wall triangle order to orient normals inward.
   const perimThreshold = getHoleWallPerimeterThreshold();
-  for (let h=0; h<holeRings.length; h++) {
-    const ring = holeRings[h];
-    const start = holeStarts[h]; // bottom vertex start index for this hole
+  for (let h=0; h<activeHoles.length; h++) {
+    const ring = activeHoles[h].ring;
+    const start = activeHoles[h].start; // bottom vertex start index for this hole
     const len = ring.length;
     if (len < 3) continue;
     // Compute approximate perimeter in degree space (simple planar) to filter tiny holes
@@ -731,8 +918,20 @@ function buildProjectedExtrudedPolygon(outer: [number,number][], holeRings: [num
   geom.setIndex(indices);
   geom.computeVertexNormals();
   // bottom faces inserted first; record capTriCount for diagnostics (bottom only)
-  geom.userData.capTriCount = faces.length;
+  geom.userData.capTriCount = filteredFaces.length;
   return geom;
+}
+
+function isDegenerateFace(tri: readonly number[] | [number, number, number], vertices: THREE.Vector2[], epsilon = 1e-12): boolean {
+  if (tri.length < 3) {
+    return true;
+  }
+  const a = vertices[tri[0]];
+  const b = vertices[tri[1]];
+  const c = vertices[tri[2]];
+  if (!a || !b || !c) return true;
+  const area2 = Math.abs((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x));
+  return area2 < epsilon;
 }
 
 // Compute edge length ratio metrics limited to cap triangles when available.

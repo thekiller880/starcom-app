@@ -1,0 +1,83 @@
+.popup {
+  width: min(440px, 90vw);
+  max-height: 80vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 196, 255, 0.35);
+  background: rgba(0, 16, 36, 0.95);
+  color: #d9f6ff;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.title {
+  margin: 0;
+  font-size: 16px;
+}
+
+.closeButton {
+  border: 1px solid rgba(0, 196, 255, 0.35);
+  background: rgba(0, 0, 0, 0.45);
+  color: #00c4ff;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.closeButton:hover {
+  border-color: rgba(0, 196, 255, 0.55);
+}
+
+.stats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 196, 255, 0.2);
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.statRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.actionButton {
+  width: 100%;
+  text-align: left;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 196, 255, 0.3);
+  background: rgba(0, 0, 0, 0.45);
+  color: #d9f6ff;
+  cursor: pointer;
+}
+
+.actionButton:hover {
+  border-color: rgba(0, 196, 255, 0.5);
+  background: rgba(0, 196, 255, 0.12);
+}
+
+.errorText {
+  margin: 0;
+  font-size: 12px;
+  color: #ff9a9a;
+}

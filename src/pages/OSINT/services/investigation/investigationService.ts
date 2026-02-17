@@ -183,10 +183,10 @@ class InvestigationService {
       }
       
       const endpoint = osintEndpoints.investigations.export(id);
-      const response = await fetch(`${osintApi.baseUrl}${endpoint}`, {
+      const response = await fetch(`${osintApi.getBaseUrl()}${endpoint}`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${osintApi.authToken}`
+          'Authorization': `Bearer ${osintApi.getAuthToken()}`
         }
       });
       
@@ -261,5 +261,4 @@ class InvestigationService {
 // Create singleton instance
 export const investigationService = new InvestigationService();
 
-// Export types
-export type { CreateInvestigationOptions };
+// Types are exported above with interface declaration

@@ -1,10 +1,10 @@
 import React from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, FormControlLabel, Checkbox, MenuItem } from '@mui/material';
-import type { IntelClassification } from '../../../../types/intel/IntelReportUI';
+import type { IntelReportClassification } from '../../../../types/intel/IntelReportUI';
 
 export interface ExportDraftConfig {
   title: string;
-  classification: IntelClassification;
+  classification: IntelReportClassification;
   includeFilters: boolean;
   includeWatchlists: boolean;
   redactSensitive: boolean;
@@ -18,7 +18,7 @@ export const ExportDraftDialog: React.FC<{
   onConfirm: (cfg: ExportDraftConfig) => void;
 }> = ({ open, initialTitle, boardId, onClose, onConfirm }) => {
   const [title, setTitle] = React.useState(initialTitle || 'Draft Report');
-  const [classification, setClassification] = React.useState<IntelClassification>('UNCLASSIFIED');
+  const [classification, setClassification] = React.useState<IntelReportClassification>('UNCLASSIFIED');
   const [includeFilters, setIncludeFilters] = React.useState(true);
   const [includeWatchlists, setIncludeWatchlists] = React.useState(true);
   const [redactSensitive, setRedactSensitive] = React.useState(false);
@@ -69,10 +69,10 @@ export const ExportDraftDialog: React.FC<{
           margin="dense"
           label="Classification"
           value={classification}
-          onChange={(e) => setClassification(e.target.value as IntelClassification)}
+          onChange={(e) => setClassification(e.target.value as IntelReportClassification)}
           fullWidth
         >
-          {(['UNCLASSIFIED','CONFIDENTIAL','SECRET','TOP_SECRET'] as IntelClassification[]).map(c => (
+          {(['UNCLASSIFIED','CONFIDENTIAL','SECRET','TOP_SECRET'] as IntelReportClassification[]).map(c => (
             <MenuItem key={c} value={c}>{c}</MenuItem>
           ))}
         </TextField>

@@ -1,0 +1,79 @@
+{
+  "generatedAt": "2026-02-14T19:28:48.379Z",
+  "rows": [
+    {
+      "failureMode": "Neighbor crack/gap",
+      "detector": "Topology shared-edge invariant",
+      "status": "pass",
+      "blocking": true,
+      "detail": "Shared-edge checks passed"
+    },
+    {
+      "failureMode": "Cross-country overlap (non-disputed)",
+      "detector": "Proxy: blocking QA failures in polygon parts",
+      "status": "pass",
+      "blocking": false,
+      "detail": "No blocking QA reasons"
+    },
+    {
+      "failureMode": "Dateline bridge artifact",
+      "detector": "Max edge ratio across parts",
+      "status": "warn",
+      "blocking": true,
+      "detail": "maxEdgeToMedianEdgeRatio=76.4467"
+    },
+    {
+      "failureMode": "Polar fan degeneration",
+      "detector": "Minimum triangle area threshold",
+      "status": "pass",
+      "blocking": true,
+      "detail": "minTriangleArea=0.00007053"
+    },
+    {
+      "failureMode": "Microstate disappearance",
+      "detector": "Golden offender microstate presence",
+      "status": "pass",
+      "blocking": true,
+      "detail": "Required microstate codes verified per LOD"
+    },
+    {
+      "failureMode": "Hole inversion/fill leak",
+      "detector": "Proxy: mandatory QA status",
+      "status": "pass",
+      "blocking": false,
+      "detail": "Advanced ring leak detector pending; proxy used"
+    },
+    {
+      "failureMode": "LOD pop drift",
+      "detector": "Total triangle monotonic growth by LOD",
+      "status": "pass",
+      "blocking": false,
+      "detail": "Monotonic LOD complexity proxy applied"
+    },
+    {
+      "failureMode": "Index overflow",
+      "detector": "Index format vs vertex count",
+      "status": "pass",
+      "blocking": true,
+      "detail": "Index format bounds validated"
+    },
+    {
+      "failureMode": "Border/fill mismatch",
+      "detector": "Source coverage parity checks",
+      "status": "pass",
+      "blocking": true,
+      "detail": "Borders source present for requested LODs"
+    },
+    {
+      "failureMode": "Decode stutter on low-tier profile",
+      "detector": "Performance benchmark gate",
+      "status": "warn",
+      "blocking": false,
+      "detail": "Pending dedicated runtime benchmark stage"
+    }
+  ],
+  "summary": {
+    "blockingFailures": 0,
+    "totalRows": 10
+  }
+}

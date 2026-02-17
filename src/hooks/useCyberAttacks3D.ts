@@ -6,6 +6,7 @@ import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import * as THREE from 'three';
 import { RealTimeAttackService } from '../services/CyberAttacks/RealTimeAttackService';
 import { useCyberCommandSettings } from './useCyberCommandSettings';
+import { latLngToGlobeVector3 } from '../utils/globeCoordinates';
 import type {
   CyberAttackData,
   CyberAttackQueryOptions
@@ -71,6 +72,7 @@ export const useCyberAttacks3D = (
   const serviceRef = useRef<RealTimeAttackService | null>(null);
   const animationFrameRef = useRef<number>();
   const updateTimerRef = useRef<NodeJS.Timeout>();
+  const isFetchingRef = useRef(false);
 
   // Settings integration
   const { config } = useCyberCommandSettings();
@@ -93,16 +95,20 @@ export const useCyberAttacks3D = (
     Critical: 0xff0000     // Red
   }), []);
 
+  const isMobileDevice = useMemo(() => {
+    if (typeof navigator === 'undefined') {
+      return false;
+    }
+    return /iPhone|iPad|iPod|Android|Mobile|webOS/i.test(navigator.userAgent);
+  }, []);
+
+  const effectiveUpdateInterval = useMemo(() => {
+    return isMobileDevice ? Math.max(updateInterval, 6000) : updateInterval;
+  }, [isMobileDevice, updateInterval]);
+
   // Utility function: Convert lat/lng to 3D position
   const latLngToVector3 = useCallback((lat: number, lng: number, radius: number): THREE.Vector3 => {
-    const phi = (90 - lat) * (Math.PI / 180);
-    const theta = (lng + 180) * (Math.PI / 180);
-    
-    const x = -(radius * Math.sin(phi) * Math.cos(theta));
-    const z = radius * Math.sin(phi) * Math.sin(theta);
-    const y = radius * Math.cos(phi);
-    
-    return new THREE.Vector3(x, y, z);
+    return latLngToGlobeVector3(lat, lng, radius);
   }, []);
 
   // Create attack trajectory visualization
@@ -246,8 +252,11 @@ export const useCyberAttacks3D = (
   // Load attack data
   const loadAttackData = useCallback(async () => {
     if (!serviceRef.current || !isActive) return;
+    if (isFetchingRef.current) return;
+    if (typeof document !== 'undefined' && document.hidden) return;
 
     try {
+      isFetchingRef.current = true;
       setState(prev => ({ ...prev, isLoading: true, error: null }));
 
       // Build query options from settings
@@ -282,6 +291,8 @@ export const useCyberAttacks3D = (
         isLoading: false,
         error: error instanceof Error ? error.message : 'Unknown error'
       }));
+    } finally {
+      isFetchingRef.current = false;
     }
   }, [serviceRef, isActive, maxActiveAttacks, debugMode]);
 
@@ -374,14 +385,22 @@ export const useCyberAttacks3D = (
     loadAttackData();
 
     // Set up refresh timer
-    updateTimerRef.current = setInterval(loadAttackData, updateInterval);
+    updateTimerRef.current = setInterval(loadAttackData, effectiveUpdateInterval);
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        void loadAttackData();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       if (updateTimerRef.current) {
         clearInterval(updateTimerRef.current);
       }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [isActive, loadAttackData, updateInterval]);
+  }, [isActive, loadAttackData, effectiveUpdateInterval]);
 
   // Return hook interface following the proven pattern
   return {

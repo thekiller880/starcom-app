@@ -12,6 +12,7 @@
 
 import ipfsService, { IPFSUploadResult } from './IPFSService';
 import { IntelPackage, CyberTeam, CyberInvestigation, Evidence } from '../types/cyberInvestigation';
+import { loadRuntimeConfig } from '../config/runtimeConfig';
 import { conditionalLog } from '../utils/featureFlags';
 
 // Event listener type for RelayNode events
@@ -288,8 +289,7 @@ export class RelayNodeIPFSService implements EventEmitter {
         // Optional runtime-configured provider
         let providerHeader = undefined as string | undefined;
         try {
-          const cfgMod = await import('../config/runtimeConfig');
-          const cfg = await cfgMod.loadRuntimeConfig();
+          const cfg = await loadRuntimeConfig();
           const pref = cfg.storage?.pinProvider;
           if (pref && pref !== 'none') providerHeader = pref;
         } catch {

@@ -9,6 +9,8 @@ import DeploymentDebugger from '../utils/deploymentDebugger';
 import { visualizationResourceMonitor } from '../services/visualization/VisualizationResourceMonitor';
 import { collectGeometryStats } from '../utils/threeResourceMetrics';
 import { disposeGLTF } from '../utils/disposeGLTF';
+import { latLngToGlobeVector3 } from '../utils/globeCoordinates';
+import { findPrimaryGlobeMesh } from '../utils/globeSurfaceMapping';
 
 // Import GLB asset using Vite's asset handling for static deployment compatibility
 import intelReportModelUrl from '../assets/models/intel_report-01d.glb?url';
@@ -43,6 +45,25 @@ interface UseIntelReport3DMarkersOptions {
   scale?: number;
 }
 
+interface GlobeCoordinateApi {
+  getCoords?: (lat: number, lng: number, altitude?: number) => THREE.Vector3 | { x: number; y: number; z: number };
+}
+
+function toVector3(value: unknown): THREE.Vector3 | null {
+  if (value instanceof THREE.Vector3) {
+    return value.clone();
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    const maybe = value as { x?: unknown; y?: unknown; z?: unknown };
+    if (typeof maybe.x === 'number' && typeof maybe.y === 'number' && typeof maybe.z === 'number') {
+      return new THREE.Vector3(maybe.x, maybe.y, maybe.z);
+    }
+  }
+
+  return null;
+}
+
 interface ModelInstance {
   positionContainer: THREE.Group;   // Positioned on globe surface
   orientationContainer: THREE.Group; // Handles world/camera orientation
@@ -51,6 +72,7 @@ interface ModelInstance {
   report: IntelReportOverlayMarker;
   basePosition: THREE.Vector3;
   surfaceAnchor: THREE.Vector3;
+  surfaceAnchorIsWorld: boolean;
   hoverOffset: number;
   localRotationY: number;
   globeRadius: number;
@@ -61,7 +83,7 @@ export const useIntelReport3DMarkers = (
   reports: IntelReportOverlayMarker[],
   scene: THREE.Scene | null,
   camera: THREE.Camera | null,
-  globeObject: THREE.Object3D | null,
+  globeApi: GlobeCoordinateApi | null,
   options: UseIntelReport3DMarkersOptions = {},
   hoveredReportId?: string | null // Add hover state parameter
 ) => {
@@ -78,7 +100,14 @@ export const useIntelReport3DMarkers = (
   const groupRef = useRef<THREE.Group>(new THREE.Group());
   const meshPoolRef = useRef<THREE.Object3D[]>([]);
   const modelsRef = useRef<ModelInstance[]>([]);
-  const globeMeshRef = useRef<THREE.Object3D | null>(null);
+  const globeMeshRef = useRef<THREE.Mesh | null>(null);
+  const hasGlobeCoordsApi = typeof globeApi?.getCoords === 'function';
+  const isMobileDevice = useMemo(() => {
+    if (typeof navigator === 'undefined') {
+      return false;
+    }
+    return /iPhone|iPad|iPod|Android|Mobile|webOS/i.test(navigator.userAgent);
+  }, []);
 
   // Load the GLB model once using robust asset loader with proper memoization
   useEffect(() => {
@@ -225,18 +254,6 @@ export const useIntelReport3DMarkers = (
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dependency array - load model only once per component lifecycle
 
-  // Convert lat/lng to 3D position on sphere
-  const latLngToVector3 = (lat: number, lng: number, radius: number): THREE.Vector3 => {
-    const phi = (90 - lat) * (Math.PI / 180);
-    const theta = (lng + 180) * (Math.PI / 180);
-    
-    const x = -(radius * Math.sin(phi) * Math.cos(theta));
-    const z = radius * Math.sin(phi) * Math.sin(theta);
-    const y = radius * Math.cos(phi);
-    
-    return new THREE.Vector3(x, y, z);
-  };
-
   // Add group to scene
   useEffect(() => {
     if (!scene) return;
@@ -255,6 +272,46 @@ export const useIntelReport3DMarkers = (
       globeMeshRef.current = null;
     }
   }, [scene]);
+
+  const resolveGlobeMesh = useMemo(() => {
+    return () => {
+      if (!scene) {
+        return null;
+      }
+
+      const cached = globeMeshRef.current;
+      if (cached && cached.parent) {
+        return cached;
+      }
+
+      const found = findPrimaryGlobeMesh(scene);
+      globeMeshRef.current = found;
+      return found;
+    };
+  }, [scene]);
+
+  const toWorldPosition = useMemo(() => {
+    return (lat: number, lng: number, absoluteAltitude: number): THREE.Vector3 => {
+      if (hasGlobeCoordsApi && globeApi?.getCoords) {
+        const normalizedAltitude = (absoluteAltitude / globeRadius) - 1;
+        const coords = globeApi.getCoords(lat, lng, normalizedAltitude);
+        const worldPosition = toVector3(coords);
+        if (worldPosition) {
+          return worldPosition;
+        }
+      }
+
+      const localPosition = latLngToGlobeVector3(lat, lng, absoluteAltitude);
+      const globeMesh = resolveGlobeMesh();
+
+      if (!globeMesh) {
+        return localPosition;
+      }
+
+      globeMesh.updateMatrixWorld(true);
+      return localPosition.applyMatrix4(globeMesh.matrixWorld);
+    };
+  }, [globeApi, globeRadius, hasGlobeCoordsApi, resolveGlobeMesh]);
 
   const memoizedModels = useMemo(() => {
     if (!gltfModel || !reports.length) {
@@ -277,17 +334,9 @@ export const useIntelReport3DMarkers = (
       const orientationContainer = new THREE.Group();   // Level 2: World/camera orientation
       const rotationContainer = new THREE.Group();      // Level 3: Local rotation animation
       
-      const surfaceAnchor = latLngToVector3(
-        report.latitude,
-        report.longitude,
-        globeRadius
-      );
+      const surfaceAnchor = toWorldPosition(report.latitude, report.longitude, globeRadius);
 
-      const basePosition = latLngToVector3(
-        report.latitude, 
-        report.longitude, 
-        globeRadius + hoverAltitude
-      );
+      const basePosition = toWorldPosition(report.latitude, report.longitude, globeRadius + hoverAltitude);
       
       // Set up hierarchy: position → orientation → rotation → mesh
       positionContainer.position.copy(basePosition);
@@ -307,6 +356,7 @@ export const useIntelReport3DMarkers = (
         report,
         basePosition: basePosition.clone(),
         surfaceAnchor: surfaceAnchor.clone(),
+        surfaceAnchorIsWorld: hasGlobeCoordsApi,
         hoverOffset: Math.random() * Math.PI * 2,
         localRotationY: 0,
         globeRadius,
@@ -315,7 +365,7 @@ export const useIntelReport3DMarkers = (
     });
 
     return newModels;
-  }, [gltfModel, reports, globeRadius, hoverAltitude, scale]);
+  }, [gltfModel, reports, globeRadius, hoverAltitude, scale, toWorldPosition, hasGlobeCoordsApi]);
 
   // Update models state and scene when memoizedModels change
   useEffect(() => {
@@ -349,7 +399,7 @@ export const useIntelReport3DMarkers = (
       });
       modelsRef.current = [];
 
-      meshPoolRef.current.forEach(disposeGLTF);
+      meshPoolRef.current.forEach(mesh => disposeGLTF(mesh));
       meshPoolRef.current = [];
     };
   }, []);
@@ -358,24 +408,28 @@ export const useIntelReport3DMarkers = (
   useEffect(() => {
     if (!models.length || !camera || !scene) return;
 
-    const animate = () => {
+    let lastFrameTime = 0;
+    const targetFps = isMobileDevice ? 20 : 30;
+    const frameIntervalMs = 1000 / targetFps;
+    let animationActive = !document.hidden;
+
+    const handleVisibilityChange = () => {
+      animationActive = !document.hidden;
+    };
+
+    const animate = (timestamp: number) => {
+      if (!animationActive) {
+        animationFrameRef.current = requestAnimationFrame(animate);
+        return;
+      }
+
+      if (timestamp - lastFrameTime < frameIntervalMs) {
+        animationFrameRef.current = requestAnimationFrame(animate);
+        return;
+      }
+
+      lastFrameTime = timestamp;
       const time = Date.now() * 0.001;
-
-      let globeMesh = globeMeshRef.current;
-      if (!globeMesh || globeMesh.parent === null) {
-        let found: THREE.Object3D | null = null;
-        scene.traverse((child) => {
-          if (!found && child instanceof THREE.Mesh && child.geometry instanceof THREE.SphereGeometry) {
-            found = child;
-          }
-        });
-        globeMeshRef.current = found;
-        globeMesh = found;
-      }
-
-      if (globeMesh) {
-        globeMesh.updateMatrixWorld(true);
-      }
 
       models.forEach((model) => {
         // Level 1: Position animation - hovering on globe surface
@@ -383,17 +437,11 @@ export const useIntelReport3DMarkers = (
         const hoverAmount = Math.sin(time * 2 + model.hoverOffset) * 0.2;
         
         // Calculate the base position for this lat/lng
-        const currentPosition = latLngToVector3(
+        const currentPosition = toWorldPosition(
           model.report.latitude,
           model.report.longitude,
           globeRadius + hoverAltitude + hoverAmount
         );
-        
-        // If we found the globe mesh, apply its current rotation to the position
-        if (globeMesh) {
-          globeMesh.updateMatrixWorld(true);
-          currentPosition.applyMatrix4(globeMesh.matrixWorld);
-        }
         
         model.positionContainer.position.copy(currentPosition);
         
@@ -436,34 +484,53 @@ export const useIntelReport3DMarkers = (
         const newScale = currentScale + (targetScale - currentScale) * scaleLerpSpeed;
         model.mesh.scale.setScalar(newScale);
         
-        // Apply glow effect to mesh materials
-        model.mesh.traverse((child) => {
-          if (child instanceof THREE.Mesh && child.material) {
-            const material = child.material as THREE.MeshStandardMaterial;
-            if (material.emissive) {
-              if (isHovered) {
-                material.emissive.setHex(0x00ffff); // Cyan glow
-                material.emissiveIntensity = 0.2;
-              } else {
-                material.emissive.setHex(0x000000);
-                material.emissiveIntensity = 0;
-              }
-            }
-          }
-        });
       });
 
       animationFrameRef.current = requestAnimationFrame(animate);
     };
 
-    animate();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    animationFrameRef.current = requestAnimationFrame(animate);
 
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [models, camera, scene, rotationSpeed, globeRadius, hoverAltitude, hoveredReportId, scale]);
+  }, [models, camera, scene, rotationSpeed, globeRadius, hoverAltitude, hoveredReportId, scale, toWorldPosition, isMobileDevice]);
+
+  // Apply emissive highlight only when hover state changes (avoid per-frame mesh traversal)
+  useEffect(() => {
+    if (!models.length) {
+      return;
+    }
+
+    models.forEach((model) => {
+      const isHovered = hoveredReportId === model.report.pubkey;
+      model.mesh.traverse((child) => {
+        if (!(child instanceof THREE.Mesh) || !child.material) {
+          return;
+        }
+
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        materials.forEach((material) => {
+          const emissiveMaterial = material as THREE.MeshStandardMaterial;
+          if (!('emissive' in emissiveMaterial) || !emissiveMaterial.emissive) {
+            return;
+          }
+
+          if (isHovered) {
+            emissiveMaterial.emissive.setHex(0x00ffff);
+            emissiveMaterial.emissiveIntensity = 0.2;
+          } else {
+            emissiveMaterial.emissive.setHex(0x000000);
+            emissiveMaterial.emissiveIntensity = 0;
+          }
+        });
+      });
+    });
+  }, [models, hoveredReportId]);
 
   useEffect(() => {
     const group = groupRef.current;

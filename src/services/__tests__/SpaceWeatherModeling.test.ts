@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
 import {
   buildAuroralPayload,
+  buildBowShockPayload,
+  buildMagnetopausePayload,
   computeBowShockRadius,
   computeDynamicPressureNPa,
   computeMagnetopauseStandoff
@@ -59,5 +60,26 @@ describe('SpaceWeatherModeling', () => {
     expect(payload.blackout.thresholdKp).toBe(7);
     expect(payload.blackout.gradient.inner).toBeGreaterThan(0);
     expect(payload.blackout.gradient.outer).toBeGreaterThan(payload.blackout.gradient.inner);
+  });
+
+  it('includes deformation profiles in modeled boundary payloads', () => {
+    const solarWind = {
+      speedKmPerSec: 450,
+      densityPerCm3: 6,
+      bz: -4,
+      timestamp: '2024-01-01T00:00:00Z'
+    };
+
+    const magnetopause = buildMagnetopausePayload(solarWind, 'live');
+    const bowShock = buildBowShockPayload(solarWind, magnetopause.standoffRe, 'live');
+
+    expect(magnetopause.deformation).toBeDefined();
+    expect(magnetopause.deformation?.modelVersion).toBe('shue-approx-v1');
+    expect(magnetopause.deformation?.tailRe ?? 0).toBeGreaterThan(magnetopause.deformation?.flankRe ?? 0);
+
+    expect(bowShock.deformation).toBeDefined();
+    expect(bowShock.deformation?.modelVersion).toBe('shue-approx-v1');
+    expect((bowShock.deformation?.noseRe ?? 0)).toBeGreaterThan(magnetopause.standoffRe);
+    expect((bowShock.meta as { deformationModel?: string })?.deformationModel).toBe('shue-approx-v1');
   });
 });

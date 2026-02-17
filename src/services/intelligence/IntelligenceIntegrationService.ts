@@ -262,12 +262,15 @@ export class IntelligenceIntegrationService {
       const threatAnalysis = await this.analysisEngine.analyzeIntelligence(
         validatedIntel,
         {
-          focus_areas: ['threat_detection', 'immediate_response'],
-          time_range: { start: Date.now() - 3600000, end: Date.now() }, // Last hour
-          priority_sources: ['HUMINT', 'SIGINT'],
-          analysis_objectives: ['identify_immediate_threats', 'assess_impact'],
+          analystId: 'system',
+          reportTitle: 'Immediate Threat Analysis',
+          keyQuestions: ['What is the immediate threat?', 'What action is required?'],
+          focusAreas: ['threat_detection', 'immediate_response'],
+          timeframe: { start: Date.now() - 3600000, end: Date.now() }, // Last hour
+          prioritySources: ['HUMINT', 'SIGINT'],
+          analysisObjectives: ['identify_immediate_threats', 'assess_impact'],
           constraints: [`time_limit_${context.time_sensitivity || 15}_minutes`],
-          background_context: `Immediate threat processing: ${context.threat_type || 'unknown'}`
+          backgroundContext: `Immediate threat processing: ${context.threat_type || 'unknown'}`
         },
         {
           enable_threat_assessment: true,
@@ -336,12 +339,15 @@ export class IntelligenceIntegrationService {
       const patternAnalysis = await this.analysisEngine.analyzeIntelligence(
         filteredIntel,
         {
-          focus_areas: ['pattern_detection', 'anomaly_detection'],
-          time_range: timeframe,
-          priority_sources: ['SIGINT', 'OSINT', 'HUMINT'],
-          analysis_objectives: ['detect_patterns', 'find_anomalies', 'validate_hypotheses'],
+          analystId: 'system',
+          reportTitle: 'Pattern Hunting',
+          keyQuestions: ['What patterns exist?', 'What anomalies surfaced?'],
+          focusAreas: ['pattern_detection', 'anomaly_detection'],
+          timeframe,
+          prioritySources: ['SIGINT', 'OSINT', 'HUMINT'],
+          analysisObjectives: ['detect_patterns', 'find_anomalies', 'validate_hypotheses'],
           constraints: [],
-          background_context: `Pattern hunting: ${huntingHypotheses.join(', ')}`
+          backgroundContext: `Pattern hunting: ${huntingHypotheses.join(', ')}`
         },
         {
           enable_pattern_detection: true,

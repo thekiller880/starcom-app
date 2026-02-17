@@ -103,7 +103,7 @@ const defaultConfig: GeoPoliticalConfig = {
   usePolygonOffset: true,
   polygonOffsetFactor: -1.5,
   polygonOffsetUnits: -1.5,
-  frontSideOnly: true,
+  frontSideOnly: false,
     showDisputedTerritories: true,
     showMaritimeBorders: false,
     labelVisibility: 60,

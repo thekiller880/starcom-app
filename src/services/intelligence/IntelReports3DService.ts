@@ -60,6 +60,9 @@ export interface IntelReportFilters {
     start: Date;
     end: Date;
   };
+  riskLevels?: Array<'high' | 'medium' | 'low'>;
+  relayWhitelist?: string[];
+  sourceTag?: string;
   geographic?: {
     bounds: {
       north: number;

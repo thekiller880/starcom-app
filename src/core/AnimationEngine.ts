@@ -12,6 +12,8 @@ export interface AnimationCallback {
 export class AnimationEngine {
   private static instance: AnimationEngine;
   private animations = new Map<string, AnimationCallback>();
+  private sortedAnimations: AnimationCallback[] = [];
+  private sortDirty = true;
   private isRunning = false;
   private lastTime = 0;
   private frameId?: number;
@@ -25,6 +27,7 @@ export class AnimationEngine {
 
   register(animation: AnimationCallback): void {
     this.animations.set(animation.id, animation);
+    this.sortDirty = true;
     if (!this.isRunning) {
       this.start();
     }
@@ -32,6 +35,7 @@ export class AnimationEngine {
 
   unregister(id: string): void {
     this.animations.delete(id);
+    this.sortDirty = true;
     if (this.animations.size === 0) {
       this.stop();
     }
@@ -56,11 +60,14 @@ export class AnimationEngine {
     const deltaTime = currentTime - this.lastTime;
     this.lastTime = currentTime;
 
-    // Sort by priority and execute
-    const sortedAnimations = Array.from(this.animations.values())
-      .sort((a, b) => a.priority - b.priority);
+    // Sort by priority only when registrations changed.
+    if (this.sortDirty) {
+      this.sortedAnimations = Array.from(this.animations.values())
+        .sort((a, b) => a.priority - b.priority);
+      this.sortDirty = false;
+    }
 
-    for (const animation of sortedAnimations) {
+    for (const animation of this.sortedAnimations) {
       try {
         animation.callback(deltaTime);
       } catch (error) {

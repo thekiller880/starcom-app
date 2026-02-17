@@ -289,7 +289,7 @@ export const SpaceWeatherControlSurface: React.FC<SpaceWeatherControlSurfaceProp
 
   const openDetails = () => {
     showPopup({
-      component: SpaceWeatherDetailsPopover,
+      component: SpaceWeatherDetailsPopover as unknown as React.ComponentType<{ onClose: () => void; [key: string]: unknown }>,
       props: {
         providerMeta: spaceWeatherProviderMeta,
         providerStatus,

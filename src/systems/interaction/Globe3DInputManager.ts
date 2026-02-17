@@ -5,6 +5,7 @@ import React, { useRef, useEffect, useCallback, useState } from 'react';
 import * as THREE from 'three';
 import { InteractionMode, interactionModeManager, ModeConfiguration } from './InteractionModeSystem';
 import { AdvancedInputSystem, InputEvent, GestureEvent } from './AdvancedInputSystem';
+import { vector3ToLatLng } from '../../utils/globeCoordinates';
 
 // Props interface for the new system
 export interface Globe3DInputManagerProps {
@@ -147,12 +148,11 @@ export const useGlobe3DInputManager = ({
     if (intersects.length === 0) return null;
     
     const point = intersects[0].point;
-    const radius = 100; // Globe radius
-    
+    const radius = point.length() || 100;
+
     // Convert 3D point to lat/lng
-    const lat = 90 - (Math.acos(point.y / radius) * 180 / Math.PI);
-    const lng = ((270 + (Math.atan2(point.x, point.z) * 180 / Math.PI)) % 360) - 180;
-    
+    const { lat, lng } = vector3ToLatLng(point, radius);
+
     return { lat, lng };
   }, [globeRef, containerRef]);
   

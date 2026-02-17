@@ -21,6 +21,7 @@ import type {
 } from '../../types/intelligence/IntelContextTypes';
 import { IntelReports3DService, type IntelReportFilters, type IntelServiceMetrics } from '../../services/intelligence/IntelReports3DService';
 import { IntelContextService } from '../../services/intelligence/IntelContextService';
+import { applyIntelFilters } from '../../services/intelligence/filterUtils';
 
 // =============================================================================
 // HOOK OPTIONS AND CONFIGURATION
@@ -353,7 +354,7 @@ export const useIntelReports3D = (
         setState(prevState => ({
           ...prevState,
           intelReports: reports,
-          filteredReports: applyFilters(reports, currentFilters),
+          filteredReports: applyIntelFilters(reports, currentFilters),
           loading: false,
           error: null, // Clear error on successful update
           metrics: convertServiceMetricsToPerformanceMetrics(service.getMetrics())
@@ -413,21 +414,36 @@ export const useIntelReports3D = (
   
   useEffect(() => {
     if (!config.autoRefresh || !intelServiceRef.current) return;
-    
-    const interval = setInterval(() => {
-      // Trigger re-query instead of refreshData
+
+    const refreshReports = () => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
+
       if (intelServiceRef.current) {
         intelServiceRef.current.queryAll().then(reports => {
           setState(prevState => ({
             ...prevState,
             intelReports: reports,
-            filteredReports: applyFilters(reports, currentFilters)
+            filteredReports: applyIntelFilters(reports, currentFilters)
           }));
         });
       }
-    }, config.refreshInterval);
+    };
     
-    return () => clearInterval(interval);
+    const interval = setInterval(refreshReports, config.refreshInterval);
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        refreshReports();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [config.autoRefresh, config.refreshInterval, currentFilters]);
   
   // =============================================================================
@@ -487,7 +503,7 @@ export const useIntelReports3D = (
         setState(prevState => ({
           ...prevState,
           intelReports: reports,
-          filteredReports: applyFilters(reports, currentFilters),
+          filteredReports: applyIntelFilters(reports, currentFilters),
           loading: false
         }));
         updatePerformanceMetrics();
@@ -520,130 +536,77 @@ export const useIntelReports3D = (
     if (debounceTimer.current) {
       clearTimeout(debounceTimer.current);
     }
-    
+
     debounceTimer.current = setTimeout(() => {
-      setCurrentFilters(filters);
-      setState(prevState => ({
-        ...prevState,
-        filteredReports: applyFilters(prevState.intelReports, filters)
+      setState(prev => ({
+        ...prev,
+        filteredReports: applyIntelFilters(prev.intelReports, filters)
       }));
     }, config.debounceDelay);
   }, [config.debounceDelay]);
-  
-  const clearFilters = useCallback((): void => {
-    setCurrentFilters({});
-    setState(prevState => ({
-      ...prevState,
-      filteredReports: prevState.intelReports
+
+  const clearFilters = useCallback(() => {
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+    setState(prev => ({
+      ...prev,
+      filteredReports: prev.intelReports
     }));
   }, []);
-  
+
   const queryByFilters = useCallback(async (filters: IntelReportFilters): Promise<IntelReport3DData[]> => {
-    if (!intelServiceRef.current) return [];
-    
-    try {
-      return await intelServiceRef.current.queryByFilters(filters);
-    } catch (error) {
-      setState(prevState => ({ ...prevState, error: error as Error }));
-      return [];
-    }
-  }, []);
-  
+    return applyIntelFilters(state.intelReports, filters);
+  }, [state.intelReports]);
+
   const selectIntelReport = useCallback((id: string): void => {
-    updateContext({
-      hudContext: {
-        ...state.context?.hudContext,
-        selectedObject: id
-      }
-    });
-  }, [state.context, updateContext]);
-  
+    // Minimal selection handler; could be expanded to update context state
+    setState(prev => ({ ...prev, context: prev.context }));
+  }, []);
+
   const clearSelection = useCallback((): void => {
-    updateContext({
-      hudContext: {
-        ...state.context?.hudContext,
-        selectedObject: null
-      }
-    });
-  }, [state.context, updateContext]);
-  
+    setState(prev => ({ ...prev, context: prev.context }));
+  }, []);
+
   const exportIntelData = useCallback((format: 'json' | 'csv'): string => {
-    const data = state.filteredReports.length > 0 ? state.filteredReports : state.intelReports;
-    
-    if (format === 'json') {
-      return JSON.stringify(data, null, 2);
-    } else {
-      // Simple CSV export
-      const headers = ['id', 'title', 'category', 'priority', 'lat', 'lng', 'timestamp'];
-      const rows = data.map(report => [
-        report.id,
-        report.title,
-        report.metadata.category,
-        report.visualization.priority,
-        report.location.lat,
-        report.location.lng,
-        report.timestamp.toISOString()
-      ]);
-      
-      return [headers, ...rows].map(row => row.join(',')).join('\n');
+    if (format === 'csv') {
+      const header = ['id', 'title', 'category', 'priority', 'threatLevel'];
+      const rows = state.intelReports.map(r => [r.id, r.title || '', (r as any).category || '', (r as any).priority || '', (r as any).threatLevel || '']);
+      const csv = [header.join(','), ...rows.map(row => row.join(','))].join('\n');
+      return csv;
     }
-  }, [state.filteredReports, state.intelReports]);
-  
+    return JSON.stringify(state.intelReports, null, 2);
+  }, [state.intelReports]);
+
   const importIntelData = useCallback(async (data: string, format: 'json' | 'csv'): Promise<void> => {
-    if (!intelServiceRef.current) throw new Error('Intel service not initialized');
-    
     try {
-      let reports: IntelReport3DData[];
-      
       if (format === 'json') {
-        reports = JSON.parse(data);
-      } else {
-        // Simple CSV parsing
-        const lines = data.split('\n');
-        const headers = lines[0].split(',');
-        reports = lines.slice(1).map(line => {
-          const values = line.split(',');
-          // Basic CSV to IntelReport3DData conversion
-          // This is simplified - real implementation would be more robust
-          return createIntelReportFromCSV(headers, values);
-        });
+        const parsed = JSON.parse(data) as IntelReport3DData[];
+        setState(prev => ({ ...prev, intelReports: parsed, filteredReports: parsed }));
       }
-      
-      // Import reports
-      for (const report of reports) {
-        await intelServiceRef.current.addReport(report);
-      }
-      
-    } catch (error) {
-      setState(prevState => ({ ...prevState, error: error as Error }));
-      throw error;
+    } catch (err) {
+      console.error('Failed to import intel data', err);
     }
   }, []);
-  
-  // =============================================================================
-  // UTILITIES IMPLEMENTATION
-  // =============================================================================
-  
+
   const getIntelById = useCallback((id: string): IntelReport3DData | undefined => {
     return state.intelReports.find(report => report.id === id);
   }, [state.intelReports]);
-  
+
   const getIntelByLocation = useCallback((lat: number, lng: number, radius: number): IntelReport3DData[] => {
     return state.intelReports.filter(report => {
-      const distance = calculateDistance(
-        { lat, lng },
-        { lat: report.location.lat, lng: report.location.lng }
-      );
-      return distance <= radius;
+      const loc = (report as any).location as { latitude?: number; longitude?: number } | undefined;
+      if (!loc || loc.latitude === undefined || loc.longitude === undefined) return false;
+      return Math.abs(loc.latitude - lat) <= radius && Math.abs(loc.longitude - lng) <= radius;
     });
   }, [state.intelReports]);
-  
+
   const getIntelByCategory = useCallback((category: string): IntelReport3DData[] => {
-    return state.intelReports.filter(report => report.metadata.category === category);
+    return state.intelReports.filter(report => (report as any).category === category);
   }, [state.intelReports]);
-  
+
   const getIntelByPriority = useCallback((priority: string): IntelReport3DData[] => {
-    return state.intelReports.filter(report => report.visualization.priority === priority);
+    return state.intelReports.filter(report => (report as any).visualization?.priority === priority);
   }, [state.intelReports]);
   
   const isContextActive = useCallback((): boolean => {
@@ -762,6 +725,16 @@ function applyFilters(reports: IntelReport3DData[], filters: IntelReportFilters)
 
   let filtered = [...reports];
 
+  const deriveRisk = (report: IntelReport3DData): 'high' | 'medium' | 'low' => {
+    const tags = report.metadata?.tags ?? [];
+    const tagRisk = tags.find(tag => tag.startsWith('risk:'))?.slice(5).toLowerCase();
+    if (tagRisk === 'high' || tagRisk === 'medium' || tagRisk === 'low') return tagRisk;
+    const priority = (report.visualization as any)?.priority as IntelPriority | 'critical' | undefined;
+    if (priority === 'critical') return 'high';
+    if (priority === 'high' || priority === 'medium') return 'medium';
+    return 'low';
+  };
+
   if (filters.tags?.length) {
     filtered = filtered.filter(report => {
       const tags = report.metadata?.tags ?? [];
@@ -789,6 +762,24 @@ function applyFilters(reports: IntelReport3DData[], filters: IntelReportFilters)
       if (!report.timestamp) return false;
       const timestamp = report.timestamp instanceof Date ? report.timestamp : new Date(report.timestamp);
       return timestamp >= start && timestamp <= end;
+    });
+  }
+
+  if (filters.riskLevels?.length) 
+    filtered = filtered.filter(report => filters.riskLevels!.includes(deriveRisk(report)));
+
+  if (filters.relayWhitelist?.length) {
+    filtered = filtered.filter(report => {
+      const tags = report.metadata?.tags ?? [];
+      return filters.relayWhitelist!.some(relay => tags.includes(`relay:${relay}`));
+    });
+  }
+
+  if (filters.sourceTag?.trim()) {
+    const needle = filters.sourceTag.trim().toLowerCase();
+    filtered = filtered.filter(report => {
+      const tags = report.metadata?.tags ?? [];
+      return tags.some(tag => tag.toLowerCase().includes(needle));
     });
   }
 

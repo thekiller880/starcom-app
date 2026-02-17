@@ -43,6 +43,34 @@ export interface QualityAssessment {
   lastVerified?: number;
 }
 
+// Classification deprecated: keep as loose string for legacy callers
+export const ClassificationLevel = {
+  UNRESTRICTED: 'UNRESTRICTED',
+  UNCLASSIFIED: 'UNCLASSIFIED',
+  RESTRICTED: 'RESTRICTED',
+  SENSITIVE: 'SENSITIVE',
+  CONFIDENTIAL: 'CONFIDENTIAL',
+  SECRET: 'SECRET',
+  TOP_SECRET: 'TOP_SECRET'
+} as const;
+
+export type ClassificationLevel = typeof ClassificationLevel[keyof typeof ClassificationLevel];
+
+// Legacy stub to keep callers compiling while classification is removed from the product
+export class ClassificationUtils {
+  static validate(_level?: ClassificationLevel): { isValid: boolean; errors: string[] } {
+    return { isValid: true, errors: [] };
+  }
+
+  static compareClassificationLevel(_a?: ClassificationLevel, _b?: ClassificationLevel): number {
+    return 0;
+  }
+
+  static generateBanner(level?: ClassificationLevel): string {
+    return (level || ClassificationLevel.UNRESTRICTED).toString();
+  }
+}
+
 /**
  * Quality Utilities
  */

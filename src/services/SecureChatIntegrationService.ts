@@ -2,7 +2,7 @@
 // Integration layer connecting SecureChat UI with Nostr, IPFS, and PQC backend services
 // Earth Alliance secure communication protocol implementation
 
-import NostrService from './nostrService';
+import { NostrService } from './nostrService';
 import ipfsService from './IPFSService';
 import { UnifiedIPFSNostrService } from './UnifiedIPFSNostrService';
 import { pqCryptoService } from './crypto/SOCOMPQCryptoService';
@@ -38,7 +38,6 @@ export interface SecureChatContact {
   lastSeen: number;
   publicKey: string;
   agency?: string;
-  clearanceLevel?: string;
   metadata?: {
     nostrChannel?: unknown;
     synchronized?: boolean;
@@ -228,14 +227,7 @@ export class SecureChatIntegrationService {
           const nostrMessage = await this.nostrService.sendMessage(
             message.contactId, // Use as channel ID
             encryptedContent,
-            this.mapMessageTypeToNostr(message.type),
-            {
-              originalMessageId: messageId,
-              attachmentHashes: ipfsHashes,
-              threatLevel: message.threatLevel,
-              pqcEncrypted,
-              earthAllianceProtocol: true
-            }
+            this.mapMessageTypeToNostr(message.type)
           );
 
           if (nostrMessage) {
@@ -411,7 +403,6 @@ export class SecureChatIntegrationService {
             lastSeen: Date.now(),
             publicKey: channel.id, // Use channel ID as public key placeholder
             agency: channel.agency,
-            clearanceLevel: channel.clearanceLevel,
             metadata: {
               nostrChannel: channel,
               synchronized: true,

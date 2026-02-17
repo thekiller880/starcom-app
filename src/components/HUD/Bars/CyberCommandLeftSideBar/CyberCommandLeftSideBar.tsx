@@ -1,4 +1,4 @@
-import React, { lazy, Suspense } from 'react';
+import React, { Suspense } from 'react';
 // Replaced old monolithic settings panel with new layer system container
 import { SpaceWeatherLayerSelector } from '../../../SpaceWeather/SpaceWeatherLayerSelector';
 import { SpaceWeatherSettingsContainer } from '../../../SpaceWeather/SpaceWeatherSettingsContainer';
@@ -6,9 +6,6 @@ import { SpaceWeatherControlSurface } from '../../../SpaceWeather/SpaceWeatherCo
 import { useSpaceWeatherSidebarLayout } from '../../../SpaceWeather/SpaceWeatherSidebarLayout';
 import { VisualizationModeInterface } from '../../Common/VisualizationModeInterface';
 import styles from './CyberCommandLeftSideBar.module.css';
-
-// Lazy load TinyGlobe to reduce initial bundle size
-const TinyGlobe = lazy(() => import('../../../TinyGlobe/TinyGlobe'));
 
 const SettingsPanel: React.FC = () => {
   const layout = useSpaceWeatherSidebarLayout();
@@ -40,13 +37,6 @@ const CyberCommandLeftSideBar: React.FC = () => {
     <div className={styles.cyberCommandLeftDock}>
       <div className={styles.cyberCommandLeftSideBar}>
         <div className={styles.content}>
-          {/* TinyGlobe - Keep this as it works well */}
-          <div className={styles.globeContainer}>
-            <Suspense fallback={<div className={styles.tinyGlobePlaceholder}>Loading Globe...</div>}>
-              <TinyGlobe />
-            </Suspense>
-          </div>
-
           {/* Visualization Mode Controls - NEW: Primary + Secondary mode buttons */}
           <div className={styles.visualizationControls}>
             <Suspense fallback={<div className={styles.visualizationPlaceholder}>⚡</div>}>

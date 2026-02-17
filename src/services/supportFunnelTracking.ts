@@ -4,7 +4,9 @@ export type SupportFunnelEvent =
   | 'funnel_impression'
   | 'cta_nostr_click'
   | 'cta_fund_click'
+  | 'cta_external_click'
   | 'cta_learn_more'
+  | 'cta_request_invite'
   | 'copy_invite'
   | 'action_snooze'
   | 'action_dismiss'
@@ -14,7 +16,20 @@ export type SupportFunnelEvent =
 
 export type SupportFunnelPayload = {
   event: SupportFunnelEvent;
-  target?: 'nostr' | 'fund' | 'learn' | 'copy' | 'snooze' | 'dismiss' | 'entry' | 'fallback';
+  target?:
+    | 'nostr'
+    | 'fund'
+    | 'learn'
+    | 'copy'
+    | 'snooze'
+    | 'dismiss'
+    | 'entry'
+    | 'fallback'
+    | 'discord'
+    | 'telegram'
+    | 'github'
+    | 'survey'
+    | 'request_invite';
   variant?: string | null;
   sessionId?: string;
   env?: string;

@@ -3,6 +3,12 @@
 // Utility functions to derive magnetopause/bow shock radii and auroral oval geometry
 // from solar wind and Kp inputs. Includes safe clamps and simple fallbacks for MVP.
 
+import {
+  type BoundaryDeformationProfile,
+  computeBowShockDeformation,
+  computeMagnetopauseDeformation
+} from './SpaceWeatherBoundaryModel';
+
 export type SolarWindSnapshot = {
   speedKmPerSec: number;
   densityPerCm3: number;
@@ -20,6 +26,7 @@ export type MagnetopausePayload = {
   lastUpdated: string;
   quality: 'live' | 'fallback' | 'stale';
   clamped?: boolean;
+  deformation?: BoundaryDeformationProfile;
   meta?: Record<string, unknown>;
 };
 
@@ -28,6 +35,7 @@ export type BowShockPayload = {
   lastUpdated: string;
   quality: 'live' | 'fallback' | 'stale';
   clamped?: boolean;
+  deformation?: BoundaryDeformationProfile;
   meta?: Record<string, unknown>;
 };
 
@@ -112,24 +120,41 @@ export function buildAuroralPayload(kpSnapshot: KpSnapshot, quality: AuroraPaylo
 export function buildMagnetopausePayload(sw: SolarWindSnapshot, quality: MagnetopausePayload['quality']): MagnetopausePayload {
   const pressure = computeDynamicPressureNPa(sw.densityPerCm3, sw.speedKmPerSec);
   const { value, clamped } = computeMagnetopauseStandoff(pressure);
+  const deformation = computeMagnetopauseDeformation(value, {
+    pressureNPa: pressure,
+    speedKmPerSec: sw.speedKmPerSec,
+    bz: sw.bz
+  });
   return {
     standoffRe: value,
     lastUpdated: sw.timestamp,
     quality,
     clamped,
-    meta: { pressureNPa: pressure },
+    deformation,
+    meta: { pressureNPa: pressure, deformationModel: deformation.modelVersion },
   };
 }
 
 export function buildBowShockPayload(sw: SolarWindSnapshot, magnetopauseRe: number, quality: BowShockPayload['quality']): BowShockPayload {
   const pressure = computeDynamicPressureNPa(sw.densityPerCm3, sw.speedKmPerSec);
   const { value, clamped } = computeBowShockRadius(pressure, magnetopauseRe);
+  const magnetopauseDeformation = computeMagnetopauseDeformation(magnetopauseRe, {
+    pressureNPa: pressure,
+    speedKmPerSec: sw.speedKmPerSec,
+    bz: sw.bz
+  });
+  const deformation = computeBowShockDeformation(value, magnetopauseDeformation, {
+    pressureNPa: pressure,
+    speedKmPerSec: sw.speedKmPerSec,
+    bz: sw.bz
+  });
   return {
     radiusRe: value,
     lastUpdated: sw.timestamp,
     quality,
     clamped,
-    meta: { pressureNPa: pressure },
+    deformation,
+    meta: { pressureNPa: pressure, deformationModel: deformation.modelVersion },
   };
 }
 

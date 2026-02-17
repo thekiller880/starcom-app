@@ -32,42 +32,66 @@ const InvestigationSelector: React.FC<InvestigationSelectorProps> = ({
     const mockInvestigations: Investigation[] = [
       {
         id: 'inv-001',
-        name: 'Operation Bluebird',
+        title: 'Operation Bluebird',
         description: 'Investigation into suspicious financial activity',
-        created: new Date('2025-06-15T10:30:00'),
-        modified: new Date('2025-07-01T14:22:00'),
+        entities: [],
+        relationships: [],
+        timeline: [],
+        searches: [],
+        notes: [],
         tags: ['financial', 'priority'],
-        shared: ['agent.smith', 'dana.scully'],
+        createdAt: new Date('2025-06-15T10:30:00Z').toISOString(),
+        updatedAt: new Date('2025-07-01T14:22:00Z').toISOString(),
+        owner: 'agent.smith',
+        collaborators: ['agent.smith', 'dana.scully'],
         status: 'active'
       },
       {
         id: 'inv-002',
-        name: 'Project Sunflower',
+        title: 'Project Sunflower',
         description: 'Social media presence analysis',
-        created: new Date('2025-06-20T08:15:00'),
-        modified: new Date('2025-06-28T11:45:00'),
+        entities: [],
+        relationships: [],
+        timeline: [],
+        searches: [],
+        notes: [],
         tags: ['social-media', 'personal'],
-        shared: [],
+        createdAt: new Date('2025-06-20T08:15:00Z').toISOString(),
+        updatedAt: new Date('2025-06-28T11:45:00Z').toISOString(),
+        owner: 'dana.scully',
+        collaborators: [],
         status: 'active'
       },
       {
         id: 'inv-003',
-        name: 'Case #XF-2207',
+        title: 'Case #XF-2207',
         description: 'Domain infrastructure mapping',
-        created: new Date('2025-05-10T16:20:00'),
-        modified: new Date('2025-06-30T09:10:00'),
+        entities: [],
+        relationships: [],
+        timeline: [],
+        searches: [],
+        notes: [],
         tags: ['infrastructure', 'network'],
-        shared: ['fox.mulder'],
+        createdAt: new Date('2025-05-10T16:20:00Z').toISOString(),
+        updatedAt: new Date('2025-06-30T09:10:00Z').toISOString(),
+        owner: 'skinner',
+        collaborators: ['fox.mulder'],
         status: 'archived'
       },
       {
         id: 'inv-004',
-        name: 'Cerberus Analysis',
+        title: 'Cerberus Analysis',
         description: 'Cryptocurrency transaction tracking',
-        created: new Date('2025-07-01T12:00:00'),
-        modified: new Date('2025-07-03T15:30:00'),
+        entities: [],
+        relationships: [],
+        timeline: [],
+        searches: [],
+        notes: [],
         tags: ['crypto', 'blockchain', 'priority'],
-        shared: [],
+        createdAt: new Date('2025-07-01T12:00:00Z').toISOString(),
+        updatedAt: new Date('2025-07-03T15:30:00Z').toISOString(),
+        owner: 'cipher.ops',
+        collaborators: [],
         status: 'active'
       }
     ];
@@ -104,7 +128,8 @@ const InvestigationSelector: React.FC<InvestigationSelectorProps> = ({
   }, [isOpen]);
 
   // Format date for display
-  const formatDate = (date: Date) => {
+  const formatDate = (isoDate: string) => {
+    const date = new Date(isoDate);
     const now = new Date();
     const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
     
@@ -124,11 +149,13 @@ const InvestigationSelector: React.FC<InvestigationSelectorProps> = ({
   };
 
   // Filter investigations based on search
-  const filteredInvestigations = investigations.filter(inv => 
-    inv.name.toLowerCase().includes(filter.toLowerCase()) ||
-    inv.description.toLowerCase().includes(filter.toLowerCase()) ||
-    inv.tags.some(tag => tag.toLowerCase().includes(filter.toLowerCase()))
-  );
+  const filteredInvestigations = investigations.filter(inv => {
+    return (
+      inv.title.toLowerCase().includes(filter.toLowerCase()) ||
+      inv.description.toLowerCase().includes(filter.toLowerCase()) ||
+      inv.tags.some(tag => tag.toLowerCase().includes(filter.toLowerCase()))
+    );
+  });
 
   // Get icon for investigation
   const getInvestigationIcon = (investigation: Investigation) => {
@@ -148,7 +175,7 @@ const InvestigationSelector: React.FC<InvestigationSelectorProps> = ({
       >
         <Folder size={18} />
         <span className={styles.current}>
-          {activeInvestigation ? activeInvestigation.name : 'Select Investigation'}
+          {activeInvestigation ? activeInvestigation.title || 'Select Investigation' : 'Select Investigation'}
         </span>
         {isOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
       </button>
@@ -180,11 +207,11 @@ const InvestigationSelector: React.FC<InvestigationSelectorProps> = ({
                 >
                   <div className={styles.investigationHeader}>
                     {getInvestigationIcon(investigation)}
-                    <span className={styles.name}>{investigation.name}</span>
-                    {investigation.shared.length > 0 && (
+                    <span className={styles.name}>{investigation.title}</span>
+                    {investigation.collaborators?.length > 0 && (
                       <div className={styles.shared}>
                         <Users size={14} />
-                        <span>{investigation.shared.length}</span>
+                        <span>{investigation.collaborators.length}</span>
                       </div>
                     )}
                   </div>
@@ -192,10 +219,10 @@ const InvestigationSelector: React.FC<InvestigationSelectorProps> = ({
                   <div className={styles.meta}>
                     <span className={styles.date}>
                       <Clock size={14} />
-                      {formatDate(investigation.modified)}
+                      {formatDate(investigation.updatedAt || investigation.createdAt)}
                     </span>
                     <div className={styles.tags}>
-                      {investigation.tags.map(tag => (
+                      {(investigation.tags || []).map(tag => (
                         <span key={tag} className={styles.tag}>{tag}</span>
                       ))}
                     </div>

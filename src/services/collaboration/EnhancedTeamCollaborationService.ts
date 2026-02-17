@@ -24,8 +24,7 @@ import {
   Team, 
   CollaborationSession, 
   Operator, 
-  AgencyType, 
-  ClearanceLevel 
+  AgencyType 
 } from '../../types/features/collaboration';
 
 // Enhanced team types for blockchain integration
@@ -48,7 +47,6 @@ export interface TeamBlockchainMetadata {
   membershipRequirements: {
     minimumStake?: number;
     requiredNFTs?: PublicKey[];
-    clearanceLevel: ClearanceLevel;
     agencyRestrictions?: AgencyType[];
   };
   collaborationSettings: {
@@ -67,7 +65,6 @@ export interface TeamIntelPackage {
   onChainAddress?: PublicKey;
   ipfsHash?: string;
   metadata: {
-    classification: ClearanceLevel;
     createdAt: number;
     lastModified: number;
     version: number;
@@ -170,7 +167,6 @@ export class EnhancedTeamCollaborationService {
         name: teamData.name,
         description: teamData.description,
         agency: teamData.agency,
-        classification: teamData.classification,
         creator: creator.publicKey.toBase58(),
         createdAt: Date.now(),
         type: 'TEAM_METADATA',
@@ -222,7 +218,6 @@ export class EnhancedTeamCollaborationService {
           lastUpdated: Date.now(),
           blockchainSignature: signature,
           membershipRequirements: {
-            clearanceLevel: teamData.classification,
             agencyRestrictions: teamData.agency ? [teamData.agency] : undefined,
           },
           collaborationSettings: {
@@ -241,7 +236,6 @@ export class EnhancedTeamCollaborationService {
         name: 'Team Creator',
         agency: teamData.agency || 'CYBER_COMMAND',
         role: 'LEAD_ANALYST',
-        clearanceLevel: teamData.classification,
         specializations: [],
         status: 'ONLINE',
         lastActivity: new Date(),
@@ -303,7 +297,6 @@ export class EnhancedTeamCollaborationService {
           name: newMember.name,
           agency: newMember.agency,
           role: newMember.role,
-          clearanceLevel: newMember.clearanceLevel,
           walletAddress: newMember.walletAddress
         },
         inviter: inviter.publicKey.toBase58(),
@@ -370,7 +363,6 @@ export class EnhancedTeamCollaborationService {
     packageData: {
       name: string;
       description: string;
-      classification: ClearanceLevel;
       tags: string[];
     },
     creator: { publicKey: PublicKey; signTransaction: (tx: Transaction) => Promise<Transaction> }
@@ -428,7 +420,6 @@ export class EnhancedTeamCollaborationService {
         teamId,
         name: packageData.name,
         description: packageData.description,
-        classification: packageData.classification,
         tags: packageData.tags,
         reportCount: reports.length,
         reportSignatures,
@@ -486,7 +477,6 @@ export class EnhancedTeamCollaborationService {
         collaborators: [creator.publicKey.toBase58()],
         onChainAddress: packageKeypair.publicKey,
         metadata: {
-          classification: packageData.classification,
           createdAt: Date.now(),
           lastModified: Date.now(),
           version: 1,
@@ -556,7 +546,6 @@ export class EnhancedTeamCollaborationService {
         timestamp: Date.now(),
         type: 'SHARE_INTEL_PACKAGE',
         packageMetadata: {
-          classification: intelPackage.metadata.classification,
           reportCount: intelPackage.reports.length,
           version: intelPackage.metadata.version
         }
@@ -734,7 +723,6 @@ export class EnhancedTeamCollaborationService {
         sessionId,
         name: sessionData.name,
         description: sessionData.description,
-        classification: sessionData.classification,
         leadAgency: sessionData.leadAgency,
         creator: creator.publicKey.toBase58(),
         createdAt: Date.now(),

@@ -1,5 +1,5 @@
 {
-  "generated": "2025-08-30T22:18:22.570Z",
+  "generated": "2026-02-14T03:01:45.671Z",
   "algorithm": [
     "sha256",
     "sha1"
@@ -7,33 +7,33 @@
   "artifacts": [
     {
       "path": "public/geopolitical/normalized/world-borders-lod0.normalized.json",
-      "bytes": 484988,
-      "sha256": "8cfcb5b4fe7dcdcf75132d48c99e44a998d0b462d6d4565ea21648a88d849b11",
-      "sha1": "0fab0498e92b928a34d8c78cf70054465288e1d7",
+      "bytes": 483312,
+      "sha256": "a714fe568802f907fd7ffa4879ea60d516ca30c8d691374122829b10c75ba3f5",
+      "sha1": "8510b08b4581110709a5bc76991038cddcbb36f1",
       "class": "normalized",
       "note": "LOD0"
     },
     {
       "path": "public/geopolitical/normalized/world-borders-lod1.normalized.json",
-      "bytes": 556515,
-      "sha256": "257b09cf84aff29e612ba7300bb2fe9aa4a070728810c00108973fbee9e074f9",
-      "sha1": "165ddcfc8856d6a33aa4d95c9bc9aeaff851bfb4",
+      "bytes": 555317,
+      "sha256": "96f357dfa6145d2c3cafe47a360e9c5378d2abd4a3ebd798cea6b48a02e1c78a",
+      "sha1": "fcbd3e45cdd4a4e4ca52cba63966b4366acc5b8f",
       "class": "normalized",
       "note": "LOD1"
     },
     {
       "path": "public/geopolitical/normalized/world-borders-lod2.normalized.json",
-      "bytes": 699002,
-      "sha256": "9ba6ea79567d662b643277bc51b9e40ba4c651b17f498f778a13bd28029fe3c8",
-      "sha1": "29f65f1838769164ac2e4bfdaec2554299e11b66",
+      "bytes": 697566,
+      "sha256": "ad27533a46a6eb5c2d56d33cce5183bb1c978b32fe96b8f77e7b16ae5872288c",
+      "sha1": "f69c3456b5e656361ec1f8f680cfe8d211701574",
       "class": "normalized",
       "note": "LOD2"
     },
     {
       "path": "public/geopolitical/topology/world-borders.topology.json",
-      "bytes": 595273,
-      "sha256": "5ea8569d678c13c07765f874a7d291139462570b7530859ccbb69dd3288011b2",
-      "sha1": "f1939c899fecc388605818f90a080f84dc6dd6ba",
+      "bytes": 593805,
+      "sha256": "da131de3cff7679adfbd51de1ecac08f1d4de4cf7ed35c99ecd2f76e34e7cf8c",
+      "sha1": "7a02d3bf0b1ef530e15fcad22a8b330eb65e2a61",
       "class": "topology",
       "note": "land borders shared arcs"
     },
@@ -48,7 +48,7 @@
   ],
   "summary": {
     "count": 5,
-    "totalBytes": 2397860
+    "totalBytes": 2392082
   },
   "notes": {
     "maritimeStatus": "present"

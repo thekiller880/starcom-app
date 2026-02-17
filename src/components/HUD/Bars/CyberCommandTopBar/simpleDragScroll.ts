@@ -23,6 +23,10 @@ interface DragScrollReturn {
 }
 
 export const useSimpleDragScroll = (): DragScrollReturn => {
+  const DRAG_THRESHOLD_PX = 4;
+  const MOMENTUM_FRICTION_PER_16MS = 0.95;
+  const MOMENTUM_STOP_THRESHOLD = 0.02;
+
   const [dragState, setDragState] = useState<DragScrollState>({
     isDragging: false,
     startX: 0,
@@ -35,90 +39,154 @@ export const useSimpleDragScroll = (): DragScrollReturn => {
   const [scrollOffset, setScrollOffset] = useState(0);
   const lastTimeRef = useRef<number>(0);
   const lastXRef = useRef<number>(0);
+  const pointerDownRef = useRef(false);
+  const dragActivatedRef = useRef(false);
+  const startXRef = useRef(0);
+  const startOffsetRef = useRef(0);
+  const velocityRef = useRef(0);
+  const momentumIdRef = useRef<number | null>(null);
+  const scrollOffsetRef = useRef(0);
+  const stateRafRef = useRef<number | null>(null);
+  const lastMomentumTsRef = useRef<number | null>(null);
+
+  const commitOffset = useCallback((nextOffset: number) => {
+    scrollOffsetRef.current = nextOffset;
+
+    if (stateRafRef.current !== null) {
+      return;
+    }
+
+    stateRafRef.current = requestAnimationFrame(() => {
+      stateRafRef.current = null;
+      setScrollOffset(scrollOffsetRef.current);
+    });
+  }, []);
+
+  const stopMomentum = useCallback(() => {
+    if (momentumIdRef.current !== null) {
+      cancelAnimationFrame(momentumIdRef.current);
+      momentumIdRef.current = null;
+    }
+    lastMomentumTsRef.current = null;
+    velocityRef.current = 0;
+    setDragState(prev => ({ ...prev, momentumId: null, velocity: 0 }));
+  }, []);
 
   // Start drag
   const startDrag = useCallback((clientX: number) => {
-    // Cancel any momentum
-    if (dragState.momentumId) {
-      cancelAnimationFrame(dragState.momentumId);
-    }
+    stopMomentum();
 
-    setDragState({
-      isDragging: true,
-      startX: clientX,
-      scrollLeft: scrollOffset,
-      currentX: clientX,
-      velocity: 0,
-      momentumId: null,
-    });
-
-    lastTimeRef.current = Date.now();
+    pointerDownRef.current = true;
+    dragActivatedRef.current = false;
+    startXRef.current = clientX;
+    startOffsetRef.current = scrollOffsetRef.current;
+    lastTimeRef.current = performance.now();
     lastXRef.current = clientX;
-  }, [scrollOffset, dragState.momentumId]);
-
-  // Handle drag move
-  const handleDragMove = useCallback((clientX: number) => {
-    if (!dragState.isDragging) return;
-
-    const now = Date.now();
-    const timeDelta = now - lastTimeRef.current;
-    
-    if (timeDelta > 0) {
-      const velocity = (clientX - lastXRef.current) / timeDelta;
-      
-      setDragState(prev => ({
-        ...prev,
-        currentX: clientX,
-        velocity: velocity,
-      }));
-
-      // Update scroll position immediately
-      const deltaX = clientX - dragState.startX;
-      setScrollOffset(dragState.scrollLeft + deltaX);
-
-      lastTimeRef.current = now;
-      lastXRef.current = clientX;
-    }
-  }, [dragState.isDragging, dragState.startX, dragState.scrollLeft]);
-
-  // End drag and start momentum
-  const endDrag = useCallback(() => {
-    if (!dragState.isDragging) return;
-
-    const velocity = dragState.velocity;
-    
     setDragState(prev => ({
       ...prev,
       isDragging: false,
+      startX: clientX,
+      scrollLeft: scrollOffsetRef.current,
+      currentX: clientX,
+      velocity: 0,
+      momentumId: null,
+    }));
+  }, [stopMomentum]);
+
+  const startMomentum = useCallback((initialVelocity: number) => {
+    velocityRef.current = initialVelocity;
+    lastMomentumTsRef.current = null;
+
+    const animateMomentum = (timestamp: number) => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        momentumIdRef.current = requestAnimationFrame(animateMomentum);
+        return;
+      }
+
+      if (lastMomentumTsRef.current === null) {
+        lastMomentumTsRef.current = timestamp;
+      }
+
+      const deltaMs = Math.max(1, timestamp - (lastMomentumTsRef.current ?? timestamp));
+      lastMomentumTsRef.current = timestamp;
+
+      const friction = Math.pow(MOMENTUM_FRICTION_PER_16MS, deltaMs / 16.67);
+      velocityRef.current *= friction;
+
+      const nextOffset = scrollOffsetRef.current + velocityRef.current * deltaMs;
+      commitOffset(nextOffset);
+
+      if (Math.abs(velocityRef.current) > MOMENTUM_STOP_THRESHOLD) {
+        momentumIdRef.current = requestAnimationFrame(animateMomentum);
+      } else {
+        stopMomentum();
+      }
+    };
+
+    momentumIdRef.current = requestAnimationFrame(animateMomentum);
+    setDragState(prev => ({ ...prev, momentumId: momentumIdRef.current, velocity: initialVelocity }));
+  }, [commitOffset, stopMomentum]);
+
+  // Handle drag move
+  const handleDragMove = useCallback((clientX: number) => {
+    if (!pointerDownRef.current) {
+      return;
+    }
+
+    const now = performance.now();
+    const timeDelta = now - lastTimeRef.current;
+
+    const totalDeltaX = clientX - startXRef.current;
+    const shouldActivate = !dragActivatedRef.current && Math.abs(totalDeltaX) >= DRAG_THRESHOLD_PX;
+
+    if (shouldActivate) {
+      dragActivatedRef.current = true;
+      setDragState(prev => ({ ...prev, isDragging: true }));
+    }
+
+    if (!dragActivatedRef.current) {
+      return;
+    }
+
+    if (timeDelta > 0) {
+      velocityRef.current = (clientX - lastXRef.current) / timeDelta;
+    }
+
+    const nextOffset = startOffsetRef.current + totalDeltaX;
+    commitOffset(nextOffset);
+
+    setDragState(prev => ({
+      ...prev,
+      currentX: clientX,
+      velocity: velocityRef.current,
     }));
 
-    // Start momentum if velocity is significant
-    if (Math.abs(velocity) > 0.1) {
-      let currentVelocity = velocity;
-      let currentOffset = scrollOffset;
+    lastTimeRef.current = now;
+    lastXRef.current = clientX;
+  }, [commitOffset]);
 
-      const animateMomentum = () => {
-        currentVelocity *= 0.95; // Friction
-        currentOffset += currentVelocity * 16; // 16ms frame
+  // End drag and start momentum
+  const endDrag = useCallback(() => {
+    const wasDragging = dragActivatedRef.current;
+    pointerDownRef.current = false;
+    dragActivatedRef.current = false;
 
-        setScrollOffset(currentOffset);
+    setDragState(prev => ({
+      ...prev,
+      isDragging: false,
+      velocity: velocityRef.current,
+    }));
 
-        if (Math.abs(currentVelocity) > 0.1) {
-          const id = requestAnimationFrame(animateMomentum);
-          setDragState(prev => ({ ...prev, momentumId: id }));
-        } else {
-          setDragState(prev => ({ ...prev, momentumId: null }));
-        }
-      };
-
-      const id = requestAnimationFrame(animateMomentum);
-      setDragState(prev => ({ ...prev, momentumId: id }));
+    if (wasDragging && Math.abs(velocityRef.current) > MOMENTUM_STOP_THRESHOLD) {
+      startMomentum(velocityRef.current);
+      return;
     }
-  }, [dragState.isDragging, dragState.velocity, scrollOffset]);
+
+    stopMomentum();
+  }, [startMomentum, stopMomentum]);
 
   // Mouse handlers
   const onMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
     startDrag(e.clientX);
   }, [startDrag]);
 
@@ -132,33 +200,30 @@ export const useSimpleDragScroll = (): DragScrollReturn => {
 
   // Global event listeners
   useEffect(() => {
-    if (!dragState.isDragging) return;
+    if (!pointerDownRef.current) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      e.preventDefault();
       handleDragMove(e.clientX);
     };
 
-    const handleMouseUp = (e: MouseEvent) => {
-      e.preventDefault();
+    const handleMouseUp = () => {
       endDrag();
     };
 
     const handleTouchMove = (e: TouchEvent) => {
-      e.preventDefault();
       if (e.touches.length === 1) {
+        e.preventDefault();
         handleDragMove(e.touches[0].clientX);
       }
     };
 
-    const handleTouchEnd = (e: TouchEvent) => {
-      e.preventDefault();
+    const handleTouchEnd = () => {
       endDrag();
     };
 
-    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mousemove', handleMouseMove, { passive: true });
     document.addEventListener('mouseup', handleMouseUp);
-    document.addEventListener('touchmove', handleTouchMove);
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
     document.addEventListener('touchend', handleTouchEnd);
 
     return () => {
@@ -167,22 +232,25 @@ export const useSimpleDragScroll = (): DragScrollReturn => {
       document.removeEventListener('touchmove', handleTouchMove);
       document.removeEventListener('touchend', handleTouchEnd);
     };
-  }, [dragState.isDragging, handleDragMove, endDrag]);
+  }, [handleDragMove, endDrag, dragState.isDragging]);
 
   // Cleanup momentum on unmount
   useEffect(() => {
     return () => {
-      if (dragState.momentumId) {
-        cancelAnimationFrame(dragState.momentumId);
+      if (momentumIdRef.current !== null) {
+        cancelAnimationFrame(momentumIdRef.current);
+      }
+      if (stateRafRef.current !== null) {
+        cancelAnimationFrame(stateRafRef.current);
       }
     };
-  }, [dragState.momentumId]);
+  }, []);
 
   const resetScroll = useCallback(() => {
-    if (dragState.momentumId) {
-      cancelAnimationFrame(dragState.momentumId);
-    }
-    setScrollOffset(0);
+    stopMomentum();
+    commitOffset(0);
+    pointerDownRef.current = false;
+    dragActivatedRef.current = false;
     setDragState({
       isDragging: false,
       startX: 0,
@@ -191,7 +259,7 @@ export const useSimpleDragScroll = (): DragScrollReturn => {
       velocity: 0,
       momentumId: null,
     });
-  }, [dragState.momentumId]);
+  }, [stopMomentum, commitOffset]);
 
   return {
     dragState,

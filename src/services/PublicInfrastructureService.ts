@@ -264,11 +264,17 @@ export class PublicInfrastructureService {
   private startHealthMonitoring(): void {
     // Monitor RelayNode availability
     this.relayNodeCheckInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
       this.detectLocalRelayNode();
     }, INFRASTRUCTURE_CONFIG.HEALTH_CHECK_INTERVAL);
     
     // Monitor public infrastructure health
     this.healthCheckInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
       this.checkPublicInfrastructureHealth();
     }, INFRASTRUCTURE_CONFIG.HEALTH_CHECK_INTERVAL);
   }

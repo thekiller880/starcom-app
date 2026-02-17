@@ -14,6 +14,7 @@ import { ChatProvider, ChatProviderOptions, ChatMessage, ChatChannel, ChatUser }
 export abstract class BaseChatProvider implements ChatProvider {
   protected options: ChatProviderOptions;
   protected connected: boolean = false;
+  protected encryptionEnabled = false;
   
   constructor(options?: ChatProviderOptions) {
     this.options = options || {};
@@ -100,4 +101,18 @@ export abstract class BaseChatProvider implements ChatProvider {
    * Uploads a file attachment.
    */
   abstract uploadAttachment(file: File): Promise<{ id: string; url: string; }>;
+
+  /**
+   * Toggle encryption support for providers that implement it.
+   */
+  setEncryptionEnabled(enabled: boolean): void {
+    this.encryptionEnabled = enabled;
+  }
+
+  /**
+   * Indicates whether encryption is enabled for this provider.
+   */
+  isEncryptionEnabled(): boolean {
+    return this.encryptionEnabled;
+  }
 }

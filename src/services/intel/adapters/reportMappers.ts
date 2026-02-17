@@ -36,6 +36,7 @@ export function uiToWorkspaceReportData(ui: IntelReportUI): IntelReportData {
       status: ui.status,
       categories: ui.category ? [ui.category] : [],
       tags: ui.tags,
+      classification: ui.classification,
       geo: (ui.latitude !== undefined && ui.longitude !== undefined) ? { lat: ui.latitude, lon: ui.longitude } : undefined,
       version: ui.version ?? 1,
       manualSummary: ui.manualSummary || false,
@@ -52,6 +53,7 @@ export function workspaceFileToUI(file: IntelReportFile): IntelReportUI {
     status?: IntelReportUI['status'];
     categories?: string[];
     tags?: string[];
+    classification?: IntelReportUI['classification'];
     geo?: { lat?: number; lon?: number };
     version?: number;
     manualSummary?: boolean;
@@ -67,6 +69,7 @@ export function workspaceFileToUI(file: IntelReportFile): IntelReportUI {
   const version = typeof metadata.version === 'number' ? metadata.version : 1;
   const manualSummary = !!metadata.manualSummary;
   const status: IntelReportUI['status'] = metadata.status || 'DRAFT';
+  const classification = (metadata.classification as IntelReportUI['classification']) || 'UNCLASSIFIED';
   const analysisDeepLink = typeof metadata.analysisDeepLink === 'string' ? metadata.analysisDeepLink : undefined;
   return {
     id: d.id,
@@ -76,6 +79,7 @@ export function workspaceFileToUI(file: IntelReportFile): IntelReportUI {
     author: d.author,
     category: (categories && categories[0]) || 'GENERAL',
     tags,
+    classification,
     latitude: geo.lat as number | undefined,
     longitude: geo.lon as number | undefined,
     createdAt: new Date(d.createdAt),

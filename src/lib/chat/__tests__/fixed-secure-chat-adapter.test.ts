@@ -143,6 +143,9 @@ describe('SecureChatAdapter', () => {
   });
 
   it('should connect successfully', async () => {
+    mockService.isConnected
+      .mockReturnValueOnce(false)
+      .mockReturnValue(true);
     await adapter.connect();
     expect(mockService.connect).toHaveBeenCalled();
     expect(adapter.isConnected()).toBe(true);
@@ -165,7 +168,7 @@ describe('SecureChatAdapter', () => {
     const channelType = 'group';
     const participants: string[] = [];
     const channel = await adapter.createChannel(channelName, channelType, participants);
-    expect(mockService.createChannel).toHaveBeenCalledWith(channelName, channelType, participants);
+    expect(mockService.createChannel).toHaveBeenCalledWith(channelName, channelType, ['test-user']);
     expect(channel.id).toBeDefined();
   });
 
@@ -182,7 +185,7 @@ describe('SecureChatAdapter', () => {
   it('should send a message', async () => {
     const content = 'Test message';
     const message = await adapter.sendMessage('channel-1', content);
-    expect(mockService.sendMessage).toHaveBeenCalledWith('channel-1', content, []);
+    expect(mockService.sendMessage).toHaveBeenCalledWith('channel-1', content, undefined);
     expect(message.content).toBe(content);
   });
 

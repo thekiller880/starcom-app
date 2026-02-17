@@ -12,16 +12,16 @@ export * from './types/intelDataModels';
 export { intelDataStore } from './store/intelDataStore';
 
 // Export event system
-export {
-  enhancedEventEmitter,
+export { enhancedEventEmitter } from './events/enhancedEventEmitter';
+export type {
   EventSubscriptionOptions,
   EventHandler,
   EventFilterFunction
 } from './events/enhancedEventEmitter';
 
 // Export storage system
-export {
-  storageOrchestrator,
+export { storageOrchestrator } from './storage/storageOrchestrator';
+export type {
   StorageStrategy,
   Transaction,
   TransactionStatus
@@ -32,32 +32,29 @@ export {
 } from './storage/indexedDBAdapter';
 
 // Export adapters
-export { 
-  nodeWebAdapter,
+export { nodeWebAdapter, NodeWebAdapter } from './adapters/nodeWebAdapter';
+export type {
   NodeWebNode,
   NodeWebEdge,
   NodeWebGraph,
   NodeWebStats,
-  NodeWebFilter,
-  NodeWebAdapter
+  NodeWebFilter
 } from './adapters/nodeWebAdapter';
 
-export {
-  timelineAdapter,
+export { timelineAdapter, TimelineAdapter } from './adapters/timelineAdapter';
+export type {
   TimelineItem,
   TimelineGroup,
   TimelineData,
   TimelineStats,
-  TimelineFilter,
-  TimelineAdapter
+  TimelineFilter
 } from './adapters/timelineAdapter';
 
-export {
-  caseManagerAdapter,
+export { caseManagerAdapter, CaseManagerAdapter } from './adapters/caseManagerAdapter';
+export type {
   CaseItem,
   CaseFilter,
-  CaseStats,
-  CaseManagerAdapter
+  CaseStats
 } from './adapters/caseManagerAdapter';
 
 // Export hooks

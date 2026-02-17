@@ -298,12 +298,24 @@ describe('useGeoEvents', () => {
     );
     expect(result.current.filtered.length).toBeLessThanOrEqual(900);
 
+    for (let sample = 0; sample < 4; sample += 1) {
+      await act(async () => {
+        await result.current.refetch();
+      });
+    }
+
+    await waitFor(() => {
+      const sampleCount = telemetry.mock.calls
+        .filter((call) => call[0].type === 'render_thin_applied').length;
+      expect(sampleCount).toBeGreaterThanOrEqual(5);
+    }, { timeout: 8_000 });
+
     const durations = telemetry.mock.calls
       .filter((call) => call[0].type === 'render_thin_applied')
       .map((call) => call[0].metrics.durationMs)
       .sort((a, b) => a - b);
 
-    expect(durations.length).toBeGreaterThan(3);
+    expect(durations.length).toBeGreaterThanOrEqual(5);
     const p95Index = Math.min(durations.length - 1, Math.floor(durations.length * 0.95));
     const p95 = durations[p95Index];
     expect(p95).toBeLessThan(60);

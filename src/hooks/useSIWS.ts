@@ -71,6 +71,7 @@ export function useSIWS(): UseSIWSReturn {
   const [session, setSession] = useState<SIWSSession | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const enableDeepExtensionDiagnostics = process.env.NODE_ENV === 'development';
 
   // 🔍 ENHANCED SESSION STATE MONITORING
   useEffect(() => {
@@ -731,10 +732,18 @@ export function useSIWS(): UseSIWSReturn {
 
   // Monitor wallet selection changes
   useEffect(() => {
+    if (!enableDeepExtensionDiagnostics) {
+      return;
+    }
+
     const monitorResult = walletSelectionMonitor();
     
     // Set up interval monitoring for wallet selection stability
     const selectionStabilityCheck = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
+
       const currentState = walletSelectionMonitor();
       
       // Compare with previous state for stability issues
@@ -747,9 +756,20 @@ export function useSIWS(): UseSIWSReturn {
         recordAuthEvent('wallet_selection_changed', { previous: monitorResult, current: currentState });
       }
     }, 3000); // Check every 3 seconds
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        return;
+      }
+      walletSelectionMonitor();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     
-    return () => clearInterval(selectionStabilityCheck);
-  }, [wallet?.adapter?.name, walletSelectionMonitor, recordAuthEvent]);
+    return () => {
+      clearInterval(selectionStabilityCheck);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [wallet?.adapter?.name, walletSelectionMonitor, recordAuthEvent, enableDeepExtensionDiagnostics]);
 
   // 🔍 REAL-TIME WALLET STATE CHANGE MONITORING
   useEffect(() => {
@@ -907,6 +927,10 @@ export function useSIWS(): UseSIWSReturn {
 
   // 🔍 DEEP BROWSER EXTENSION DETECTION & HEALTH MONITORING
   useEffect(() => {
+    if (!enableDeepExtensionDiagnostics) {
+      return;
+    }
+
     const performDeepExtensionAnalysis = () => {
       const extensionAnalysis = {
         'analysis_timestamp': new Date().toISOString(),
@@ -1037,10 +1061,10 @@ export function useSIWS(): UseSIWSReturn {
         'solflare_stable': currentAnalysis.solflare_analysis.window_solflare_exists === initialAnalysis.solflare_analysis.window_solflare_exists,
         'adapter_stable': currentAnalysis.adapter_availability.current_wallet_adapter === initialAnalysis.adapter_availability.current_wallet_adapter
       });
-    }, 30000); // Check every 30 seconds (reduced from 5s for performance)
+    }, 120000); // Check every 2 minutes in diagnostics mode
     
     return () => clearInterval(healthCheckInterval);
-  }, [wallet]);
+  }, [wallet?.adapter?.name, enableDeepExtensionDiagnostics]);
 
   // 🔮 ERROR PREDICTION & ADVANCED CORRELATION SYSTEM
   const errorPatterns = useRef<Array<{

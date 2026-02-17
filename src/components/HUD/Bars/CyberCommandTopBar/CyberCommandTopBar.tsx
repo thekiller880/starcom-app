@@ -13,14 +13,12 @@ const CyberCommandTopBar: React.FC = () => {
   const { showPopup } = usePopup();
 
   // Data point click handler for future detailed popup functionality
-  const handleDataPointClick = React.useCallback((dataPoint: MarqueeDataPoint) => {
-    console.log('Data point clicked:', dataPoint);
+  const handleDataPointClick = React.useCallback((_dataPoint: MarqueeDataPoint) => {
     // TODO: Open DetailedDataPopup when implemented
   }, []);
 
   // Data point hover handler for future hover effects
-  const handleDataPointHover = React.useCallback((dataPoint: MarqueeDataPoint) => {
-    console.log('Data point hovered:', dataPoint);
+  const handleDataPointHover = React.useCallback((_dataPoint: MarqueeDataPoint | null) => {
     // TODO: Show hover tooltip when implemented
   }, []);
   // Use all real data from useTopBarData - includes comprehensive energy intelligence
@@ -134,8 +132,6 @@ const CyberCommandTopBar: React.FC = () => {
 
   // Settings popup handler - opens EnhancedSettingsPopup for marquee configuration
   const handleOpenSettings = useCallback((dataPointId?: string) => {
-    console.log('Opening settings popup', dataPointId ? `for data point: ${dataPointId}` : '');
-    
     showPopup({
       component: ({ onClose }: { onClose: () => void }) => (
         <EnhancedSettingsPopup
@@ -143,7 +139,6 @@ const CyberCommandTopBar: React.FC = () => {
           onClose={onClose}
           enabledCategories={preferences.enabledCategories}
           onCategoryToggle={(categoryId: string, enabled: boolean) => {
-            console.log(`Toggle category ${categoryId}: ${enabled}`);
             // TODO: Implement category toggle functionality
           }}
           categories={TOPBAR_CATEGORIES}

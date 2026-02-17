@@ -10,6 +10,7 @@ import { useSIWS, SIWSSession } from '../../hooks/useSIWS';
 import { secureStorage } from '../storage/SecureStorageManager';
 import { logSecurityEvent, logAuditEvent } from '../logging/SecureLogger';
 import { AuthTypes, SecurityClearance, AuthSecurityMetadata, DIDAuthState } from '../types/AuthTypes';
+import { loadRuntimeConfig } from '../../config/runtimeConfig';
 import { debugLogger, DebugCategory } from '../../utils/debugLogger';
 
 // Extract types from namespace for easier use
@@ -404,8 +405,7 @@ export const UnifiedAuthProvider: React.FC<{ children: ReactNode }> = ({ childre
           // Defer to runtime config for provider preference when available
           let providerHeader: string | undefined;
           try {
-            const cfgMod = await import('../../config/runtimeConfig');
-            const cfg = await cfgMod.loadRuntimeConfig();
+            const cfg = await loadRuntimeConfig();
             const pref = cfg.storage?.pinProvider;
             if (pref && pref !== 'none') providerHeader = pref;
           } catch {/* ignore */}

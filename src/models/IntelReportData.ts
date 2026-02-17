@@ -33,6 +33,9 @@ export interface IntelReportData {
   longitude?: number;
   timestamp: number;
   author: string; // Wallet address (base58)
+
+  // Deprecated/legacy classification placeholder (kept optional for compatibility)
+  classification?: string | { level?: string };
   
   // Intelligence-specific fields (declassified build)
   // classification removed; use qualityAssessment on Intel where relevant
@@ -76,6 +79,12 @@ export interface IntelReportData {
     metadataId: string;
     version: string;
     lastUpdated: string;
+    dashboard_generated?: boolean;
+    generation_timestamp?: number;
+    intel_sources_count?: number;
+    analysis_results_count?: number;
+    automated_processing?: boolean;
+    [key: string]: unknown;
   };
   
   // Processing History Tracking
@@ -99,6 +108,9 @@ export interface IntelReportData {
   // Blockchain metadata (available after submission)
   pubkey?: string; // Solana account public key (base58)
   signature?: string; // Transaction signature
+
+  // Attachments (legacy compatibility)
+  attachments?: unknown[];
   
   // UI-specific fields (optional, used for display)
   subtitle?: string;

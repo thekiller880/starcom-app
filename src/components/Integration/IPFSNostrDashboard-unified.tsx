@@ -504,7 +504,6 @@ export const IPFSNostrDashboard: React.FC<DashboardProps> = ({ teamId, userId })
                   updatedAt: new Date(),
                   reportIds: [],
                   tags: ['test', 'dashboard'],
-                  classification: 'CONFIDENTIAL',
                   status: 'ACTIVE',
                   affectedSystems: [],
                   threatActors: [],

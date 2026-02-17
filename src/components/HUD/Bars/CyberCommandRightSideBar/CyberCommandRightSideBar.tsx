@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useCyberCommandRightSideBar } from '../../../../context/useCyberCommandRightSideBar';
 import { useVisualizationMode } from '../../../../context/VisualizationModeContext';
+import { usePopup } from '../../../Popup/PopupManager';
 import SpaceWeatherMetricsPanel from '../../../SpaceWeather/SpaceWeatherMetricsPanel';
 import { SpaceWeatherAlertPanel } from '../../../SpaceWeather/SpaceWeatherAlertPanel';
 import { SpaceWeatherTelemetryHistoryCard } from '../../../SpaceWeather/SpaceWeatherTelemetryHistoryCard';
@@ -12,10 +13,35 @@ import useEcoNaturalSettings from '../../../../hooks/useEcoNaturalSettings';
 import { useGeoEvents } from '../../../../hooks/useGeoEvents';
 import EcoDisastersStatusCard from '../../../EcoNatural/EcoDisastersStatusCard';
 import EcoDisastersLegend, { type EcoDisasterLegendCounts } from '../../../EcoNatural/EcoDisastersLegend';
+import InvestigationWorkflowPopup from '../../Popups/InvestigationWorkflowPopup';
+import NOAAStatusPopup from '../../Popups/NOAAStatusPopup';
+import NOAADeepControlsPopup from '../../Popups/NOAADeepControlsPopup';
 import styles from './CyberCommandRightSideBar.module.css';
 
+interface PopupActionButtonProps {
+  label: string;
+  onClick: () => void;
+  testId?: string;
+}
+
+const PopupActionButton: React.FC<PopupActionButtonProps> = ({ label, onClick, testId }) => (
+  <button
+    type="button"
+    className={styles.navBtn}
+    onClick={onClick}
+    data-testid={testId}
+  >
+    {label}
+  </button>
+);
+
 // Clean tab components for future implementation
-const StatusTab: React.FC<{ layout: SpaceWeatherSidebarLayout }> = ({ layout }) => {
+const StatusTab: React.FC<{
+  layout: SpaceWeatherSidebarLayout;
+  onOpenStatusPopup: () => void;
+  onOpenNoaaDeepControlsPopup: () => void;
+  canOpenNoaaDeepControls: boolean;
+}> = ({ layout, onOpenStatusPopup, onOpenNoaaDeepControlsPopup, canOpenNoaaDeepControls }) => {
   const { visualizationMode } = useVisualizationMode();
   const { config: ecoConfig } = useEcoNaturalSettings();
   const ecoDisastersActive =
@@ -129,12 +155,28 @@ const StatusTab: React.FC<{ layout: SpaceWeatherSidebarLayout }> = ({ layout }) 
           <SpaceWeatherLayerPassiveCard layerId={layout.layerId} passive={passive} />
         </div>
       )}
-      <div className={styles.tabPlaceholder}>Status Content</div>
+      <div className={styles.sectionNav}>
+        <PopupActionButton
+          label="Open Status Popup"
+          onClick={onOpenStatusPopup}
+          testId="legacy-right-sidebar-open-status-popup"
+        />
+        {canOpenNoaaDeepControls ? (
+          <PopupActionButton
+            label="Open NOAA Deep Controls"
+            onClick={onOpenNoaaDeepControlsPopup}
+            testId="legacy-right-sidebar-open-deep-controls-popup"
+          />
+        ) : null}
+      </div>
     </div>
   );
 };
 
-const IntelTab: React.FC<{ layout: SpaceWeatherSidebarLayout }> = ({ layout }) => {
+const IntelTab: React.FC<{ layout: SpaceWeatherSidebarLayout; onOpenInvestigationPopup: () => void }> = ({
+  layout,
+  onOpenInvestigationPopup
+}) => {
   const passive = layout.passive;
   const showSW = Boolean(passive);
   return (
@@ -144,39 +186,27 @@ const IntelTab: React.FC<{ layout: SpaceWeatherSidebarLayout }> = ({ layout }) =
           <SpaceWeatherAlertPanel passive={passive} />
         </div>
       )}
-      <div className={styles.tabPlaceholder}>Intel Content</div>
+      <div className={styles.sectionNav}>
+        <PopupActionButton
+          label="Open Investigation Workflow"
+          onClick={onOpenInvestigationPopup}
+          testId="legacy-right-sidebar-open-investigation-popup"
+        />
+      </div>
     </div>
   );
 };
 
-const ControlsTab: React.FC = () => {
+const ControlsTab: React.FC<{ onOpenNoaaDeepControlsPopup: () => void }> = ({ onOpenNoaaDeepControlsPopup }) => {
   return (
     <div className={styles.tabContent}>
-      <div className={styles.tabPlaceholder}>Controls Content</div>
-    </div>
-  );
-};
-
-const ChatTab: React.FC = () => {
-  return (
-    <div className={styles.tabContent}>
-      <div className={styles.tabPlaceholder}>Chat Content</div>
-    </div>
-  );
-};
-
-const AppsTab: React.FC = () => {
-  return (
-    <div className={styles.tabContent}>
-      <div className={styles.tabPlaceholder}>Apps Content</div>
-    </div>
-  );
-};
-
-const DeveloperTab: React.FC = () => {
-  return (
-    <div className={styles.tabContent}>
-      <div className={styles.tabPlaceholder}>Developer Content</div>
+      <div className={styles.sectionNav}>
+        <PopupActionButton
+          label="Open NOAA Deep Controls"
+          onClick={onOpenNoaaDeepControlsPopup}
+          testId="legacy-right-sidebar-controls-open-deep-controls-popup"
+        />
+      </div>
     </div>
   );
 };
@@ -189,7 +219,34 @@ const CyberCommandRightSideBar: React.FC = () => {
     activeSection, 
     setActiveSection
   } = useCyberCommandRightSideBar();
+  const { visualizationMode } = useVisualizationMode();
+  const { showPopup } = usePopup();
   const layout = useSpaceWeatherSidebarLayout();
+  const canOpenNoaaDeepControls = visualizationMode.mode === 'EcoNatural' && visualizationMode.subMode === 'SpaceWeather';
+
+  const openStatusPopup = () => {
+    showPopup({
+      component: NOAAStatusPopup,
+      backdrop: true,
+      zIndex: 3200
+    });
+  };
+
+  const openInvestigationPopup = () => {
+    showPopup({
+      component: InvestigationWorkflowPopup,
+      backdrop: true,
+      zIndex: 3200
+    });
+  };
+
+  const openNoaaDeepControlsPopup = () => {
+    showPopup({
+      component: NOAADeepControlsPopup,
+      backdrop: true,
+      zIndex: 3200
+    });
+  };
   
   // Apply dynamic width to sidebar element
   const getContainerClassName = () => {
@@ -207,19 +264,27 @@ const CyberCommandRightSideBar: React.FC = () => {
   const renderTabContent = () => {
     switch (activeSection) {
       case 'status':
-        return <StatusTab layout={layout} />;
+        return (
+          <StatusTab
+            layout={layout}
+            onOpenStatusPopup={openStatusPopup}
+            onOpenNoaaDeepControlsPopup={openNoaaDeepControlsPopup}
+            canOpenNoaaDeepControls={canOpenNoaaDeepControls}
+          />
+        );
       case 'intel':
-        return <IntelTab layout={layout} />;
+        return <IntelTab layout={layout} onOpenInvestigationPopup={openInvestigationPopup} />;
       case 'controls':
-        return <ControlsTab />;
-      case 'chat':
-        return <ChatTab />;
-      case 'apps':
-        return <AppsTab />;
-      case 'developer':
-        return process.env.NODE_ENV === 'development' ? <DeveloperTab /> : null;
+        return <ControlsTab onOpenNoaaDeepControlsPopup={openNoaaDeepControlsPopup} />;
       default:
-        return <StatusTab layout={layout} />;
+        return (
+          <StatusTab
+            layout={layout}
+            onOpenStatusPopup={openStatusPopup}
+            onOpenNoaaDeepControlsPopup={openNoaaDeepControlsPopup}
+            canOpenNoaaDeepControls={canOpenNoaaDeepControls}
+          />
+        );
     }
   };
 
@@ -266,33 +331,6 @@ const CyberCommandRightSideBar: React.FC = () => {
         >
           🎛️
         </button>
-        <button 
-          className={`${styles.navBtn} ${activeSection === 'chat' ? styles.active : ''}`}
-          onClick={() => setActiveSection('chat')}
-          title="Chat"
-          aria-label="Chat"
-        >
-          💬
-        </button>
-        <button 
-          className={`${styles.navBtn} ${activeSection === 'apps' ? styles.active : ''}`}
-          onClick={() => setActiveSection('apps')}
-          title="Apps"
-          aria-label="Apps"
-        >
-          🚀
-        </button>
-        {/* Developer Tools Button - Only visible in development mode */}
-        {process.env.NODE_ENV === 'development' && (
-          <button 
-            className={`${styles.navBtn} ${activeSection === 'developer' ? styles.active : ''}`}
-            onClick={() => setActiveSection('developer')}
-            title="Developer Tools"
-            aria-label="Developer Tools"
-          >
-            🔧
-          </button>
-        )}
       </div>
 
       {/* Dynamic Content Area - All content replaced with clean placeholders */}

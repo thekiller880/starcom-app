@@ -6,10 +6,11 @@
 // =============================================================================
 
 // Raw Intel Types (Core Foundation)
-export * from './Intel';
+export type { Intel, ReliabilityRating } from './Intel';
 
-// Core Classifications and Enums
-export * from './Classification';
+// Core Classifications and Enums (selective to avoid duplicate exports)
+export { ClassificationLevel, ClassificationUtils } from './Classification';
+export type { SourceQuality, InformationVisibility, ContentSensitivity, QualityAssessment } from './Classification';
 export * from './IntelEnums';
 export * from './IntelLocation';
 
@@ -31,7 +32,11 @@ export * from './IntelReportMetaData';
 export * from './IntelReport';
 
 // Legacy Intelligence Types (Compatibility)
-export * from './Intelligence';
+export type {
+  Intelligence,
+  ThreatAssessment as ProcessedThreatAssessment,
+  IntelligenceSummary
+} from './Intelligence';
 
 // =============================================================================
 // VISUALIZATION LAYER - Depends on Processing Layer
@@ -46,17 +51,45 @@ export * from './IntelVisualization3D';
 
 // Enhanced Operational Capabilities
 export * from './Tasking';
-export * from './Lifecycle';
+export {
+  DataLifecycleManager
+} from './Lifecycle';
+export type {
+  ArchiveStatus,
+  DataOperation,
+  RetentionPolicy,
+  DataLineageEntry,
+  IntelVersion,
+  IntelDataLifecycle
+} from './Lifecycle';
 export * from './RealTimeProcessing';
 export * from './Performance';
 export * from './Operations';
 
 // Sources and Collection
 export * from './Sources';
-export * from './Requirements';
+export type {
+  IntelRequirement,
+  CollectionPriority,
+  RequirementCategory,
+  EssentialElement,
+  AreaOfInterest,
+  CollectionPlan,
+  CollectionPhase,
+  CollectionTasking
+} from './Requirements';
 
 // Assessments
-export * from './Assessments';
+export type {
+  ThreatCategory,
+  ThreatActorType,
+  AttackVector,
+  ImpactCategory,
+  RiskLevel,
+  ThreatAssessment,
+  ThreatIndicator,
+  ImpactAssessment
+} from './Assessments';
 
 // Utilities and Transformers
 export * from './Transformers';
@@ -72,44 +105,6 @@ export * from './TypeHierarchy';
 
 // Core Type Enhancements (Phase 3)
 export * from './CoreTypeEnhancements';
-
-// Re-export key interfaces for convenience
-export type {
-  Intel,
-  IntelRequirement
-} from './Intel';
-
-export type {
-  Intelligence,
-  IntelligenceSummary
-} from './Intelligence';
-
-export type {
-  ThreatAssessment,
-  RiskAssessment,
-  ThreatCategory,
-  ThreatActorType,
-  RiskLevel
-} from './Assessments';
-
-export type {
-  SourceMetadata,
-  SourceCapabilities,
-  CollectionMethod,
-  DataQuality,
-  PrimaryIntelSource
-} from './Sources';
-
-export type {
-  CollectionPriority,
-  RequirementCategory,
-  EssentialElement,
-  AreaOfInterest,
-  CollectionPlan,
-  CollectionTasking
-} from './Requirements';
-
-// Classification types removed in declassified build
 
 // Utility exports
 export {

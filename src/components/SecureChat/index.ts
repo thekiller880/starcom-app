@@ -10,3 +10,6 @@ export type {
   PQCAlgorithm,
   PQCSecurityLevel
 } from '../../types/SecureChat';
+
+// Minimal component export for layout wiring
+export { default as SecureChatManager } from './SecureChatManager';

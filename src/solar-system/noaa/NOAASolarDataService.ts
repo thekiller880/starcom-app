@@ -312,6 +312,10 @@ export class NOAASolarDataService {
   }
 
   private processSolarFlareData(rawData: NOAAFlareResponse): SolarFlareEvent[] {
+    if (!rawData?.events || !Array.isArray(rawData.events)) {
+      return [];
+    }
+
     return rawData.events.map(event => ({
       id: event.id,
       startTime: new Date(event.start_time),
@@ -409,6 +413,12 @@ export class NOAASolarDataService {
     this.updateInterval = setInterval(async () => {
       try {
         const summary = await this.getSpaceWeatherSummary();
+        this.emitDataUpdate({
+          type: 'xray_flux',
+          timestamp: new Date(),
+          data: summary,
+          source: this.usingFallback ? 'fallback' : 'noaa'
+        });
         this.emitSpaceWeatherChange(summary);
       } catch (error) {
         console.warn('Failed to update space weather data:', error);
@@ -419,9 +429,11 @@ export class NOAASolarDataService {
   private updatePerformanceStats(responseTime: number, success: boolean): void {
     this.performanceStats.requestCount++;
     this.performanceStats.lastRequestTime = new Date();
+
+    const normalizedResponseTime = success ? Math.max(1, responseTime) : responseTime;
     
     if (success) {
-      const totalTime = this.performanceStats.averageResponseTime * (this.performanceStats.requestCount - 1) + responseTime;
+      const totalTime = this.performanceStats.averageResponseTime * (this.performanceStats.requestCount - 1) + normalizedResponseTime;
       this.performanceStats.averageResponseTime = totalTime / this.performanceStats.requestCount;
     }
 

@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 import * as THREE from 'three';
 import { SolarSunManager } from '../SolarSunManager';
 import { ScaleContext } from '../types/ScaleContext';
@@ -7,7 +7,7 @@ import type { SunConfig, SunState } from '../SolarSunManager';
 describe('SolarSunManager', () => {
   let scene: THREE.Scene;
   let sunManager: SolarSunManager;
-  let mockStateChangeCallback: ReturnType<typeof vi.fn>;
+  let mockStateChangeCallback: jest.Mock;
 
   const defaultConfig: SunConfig = {
     baseRadius: 100,
@@ -19,9 +19,9 @@ describe('SolarSunManager', () => {
   };
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    jest.clearAllMocks();
     scene = new THREE.Scene();
-    mockStateChangeCallback = vi.fn();
+    mockStateChangeCallback = jest.fn();
     sunManager = new SolarSunManager(scene, defaultConfig);
   });
 
@@ -127,7 +127,7 @@ describe('SolarSunManager', () => {
       expect(state.currentScale).toBe(ScaleContext.EARTH_SPACE);
       expect(sunMesh!.visible).toBe(true);
       expect(state.currentRadius).toBe(scaleConfig!.sunRadius);
-      expect(state.currentPosition.x).toBe(scaleConfig!.sunDistance);
+      expect(state.currentPosition.length()).toBeCloseTo(scaleConfig!.sunDistance, 3);
     });
 
     test('should update sun size and position for INNER_SOLAR scale', () => {
@@ -156,7 +156,34 @@ describe('SolarSunManager', () => {
       expect(state.isVisible).toBe(true);
       expect(state.currentScale).toBe(ScaleContext.SOLAR_SYSTEM);
       expect(state.currentRadius).toBe(scaleConfig!.sunRadius);
-      expect(state.currentPosition.x).toBe(scaleConfig!.sunDistance);
+      expect(state.currentPosition.length()).toBeCloseTo(scaleConfig!.sunDistance, 3);
+    });
+
+    test('should change sun direction with time-of-day for same scale', () => {
+      sunManager.setNowProvider(() => new Date('2025-03-20T00:00:00Z'));
+      sunManager.updateForScale(ScaleContext.EARTH_SPACE);
+      const midnightPosition = sunManager.getCurrentState().currentPosition.clone();
+
+      sunManager.setNowProvider(() => new Date('2025-03-20T12:00:00Z'));
+      sunManager.updateForScale(ScaleContext.EARTH_SPACE);
+      const noonPosition = sunManager.getCurrentState().currentPosition.clone();
+
+      expect(midnightPosition.distanceTo(noonPosition)).toBeGreaterThan(1000);
+      expect(midnightPosition.length()).toBeCloseTo(noonPosition.length(), 3);
+    });
+
+    test('should apply texture longitude offset compensation', () => {
+      sunManager.setNowProvider(() => new Date('2025-03-20T12:00:00Z'));
+      sunManager.setTextureLongitudeOffset(0);
+      sunManager.updateForScale(ScaleContext.EARTH_SPACE);
+      const noOffsetPosition = sunManager.getCurrentState().currentPosition.clone();
+
+      sunManager.setTextureLongitudeOffset(90);
+      sunManager.updateForScale(ScaleContext.EARTH_SPACE);
+      const offsetPosition = sunManager.getCurrentState().currentPosition.clone();
+
+      expect(offsetPosition.distanceTo(noOffsetPosition)).toBeGreaterThan(1000);
+      expect(offsetPosition.length()).toBeCloseTo(noOffsetPosition.length(), 3);
     });
 
     test('should update corona position and scale with sun', () => {
@@ -167,7 +194,7 @@ describe('SolarSunManager', () => {
       const scaleConfig = sunManager.getScaleConfig(ScaleContext.INNER_SOLAR);
       
       expect(coronaMesh!.visible).toBe(true);
-      expect(coronaMesh!.position.x).toBe(scaleConfig!.sunDistance);
+      expect(coronaMesh!.position.length()).toBeCloseTo(scaleConfig!.sunDistance, 3);
       expect(coronaMesh!.scale.x).toBe(sunMesh!.scale.x);
     });
 
@@ -178,11 +205,11 @@ describe('SolarSunManager', () => {
       const scaleConfig = sunManager.getScaleConfig(ScaleContext.SOLAR_SYSTEM);
       
       expect(sunLight!.intensity).toBe(scaleConfig!.lightIntensity);
-      expect(sunLight!.position.x).toBe(scaleConfig!.sunDistance);
+      expect(sunLight!.position.length()).toBeCloseTo(scaleConfig!.sunDistance, 3);
     });
 
     test('should handle invalid scale context gracefully', () => {
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
       
       sunManager.updateForScale('invalid-context' as ScaleContext);
       
@@ -224,7 +251,7 @@ describe('SolarSunManager', () => {
       sunManager.onStateChange(mockStateChangeCallback);
       sunManager.updateForScale(ScaleContext.EARTH_SPACE); // Show sun
       
-      vi.clearAllMocks();
+      jest.clearAllMocks();
       
       // Change scale but keep visible
       sunManager.updateForScale(ScaleContext.INNER_SOLAR);
@@ -269,6 +296,34 @@ describe('SolarSunManager', () => {
       const newSunMesh = sunManager.getSunMesh();
       expect(newSunMesh).not.toBe(originalSunMesh); // New mesh created
       expect(newSunMesh).toBeDefined();
+    });
+
+    test('should preserve Earth-Sun radius to distance ratio across visible contexts', () => {
+      const contexts = [
+        ScaleContext.EARTH_SPACE,
+        ScaleContext.INNER_SOLAR,
+        ScaleContext.SOLAR_SYSTEM
+      ];
+
+      const ratios = contexts
+        .map((context) => sunManager.getScaleConfig(context))
+        .filter((config): config is NonNullable<typeof config> => Boolean(config && config.sunVisible))
+        .map((config) => config.sunRadius / config.sunDistance);
+
+      expect(ratios.length).toBe(3);
+      expect(Math.max(...ratios) - Math.min(...ratios)).toBeLessThan(0.0005);
+    });
+
+    test('should increase sun size and distance progressively across outer scale contexts', () => {
+      const earthSpace = sunManager.getScaleConfig(ScaleContext.EARTH_SPACE)!;
+      const innerSolar = sunManager.getScaleConfig(ScaleContext.INNER_SOLAR)!;
+      const solarSystem = sunManager.getScaleConfig(ScaleContext.SOLAR_SYSTEM)!;
+
+      expect(innerSolar.sunRadius).toBeGreaterThan(earthSpace.sunRadius);
+      expect(solarSystem.sunRadius).toBeGreaterThan(innerSolar.sunRadius);
+
+      expect(innerSolar.sunDistance).toBeGreaterThan(earthSpace.sunDistance);
+      expect(solarSystem.sunDistance).toBeGreaterThan(innerSolar.sunDistance);
     });
 
     test('should preserve current scale after config update', () => {

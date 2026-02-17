@@ -10,6 +10,8 @@ import { ThreatAssessment } from '../../models/Intel/Intelligence';
 import { IntelReportData } from '../../models/IntelReportData';
 import { IntelValidator } from '../../models/Intel/Validators';
 import { enhancedEventEmitter } from '../../core/intel/events/enhancedEventEmitter';
+import type { AnalysisContext } from './analysisContext';
+import { normalizeAnalysisContext } from './analysisContext';
 
 // =============================================================================
 // WORKFLOW TYPES AND INTERFACES
@@ -118,6 +120,8 @@ export interface WorkflowStepResult {
   metadata: StepMetadata;
 }
 
+export type { AnalysisContext } from './analysisContext';
+
 export interface WorkflowInputs {
   intel: Intel[];
   requirements?: IntelRequirement[];
@@ -132,15 +136,6 @@ export interface WorkflowOutputs {
   recommendations?: string[];
   threats?: ThreatAssessment[];
   quality_score?: number;
-}
-
-export interface AnalysisContext {
-  operationalEnvironment: string;
-  timeframe: { start: number; end: number };
-  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-  analyst: string;
-  purpose: string;
-  constraints: string[];
 }
 
 export interface IntelAlert {
@@ -222,13 +217,15 @@ export class IntelligenceWorkflowEngine {
       throw new Error(`Workflow ${workflowId} not found`);
     }
 
+    const normalizedContext = normalizeAnalysisContext(context ?? inputs.context);
+
     const execution: WorkflowExecution = {
       id: this.generateExecutionId(),
       workflowId,
       status: 'QUEUED',
       startTime: Date.now(),
       stepResults: {},
-      inputs: { ...inputs, context },
+      inputs: { ...inputs, context: normalizedContext },
       outputs: {},
       errors: [],
       metrics: {
@@ -444,50 +441,46 @@ export class IntelligenceWorkflowEngine {
       stepId: step.id,
       status: 'RUNNING',
       startTime: Date.now(),
-      output: null,
+      output: {},
       confidence: 0,
       metadata: {}
     };
 
     execution.stepResults[step.id] = stepResult;
-    execution.currentStep = step.id;
 
     try {
-      // Get inputs for this step
       const stepInputs = this.gatherStepInputs(execution, step);
+      const result = await this.executeStepProcessor(step, stepInputs, execution.inputs.context as AnalysisContext);
 
-      // Add workflow context to processing
-      const processingContext = execution.inputs.context;
-      if (workflow.requiredClassification) {
-        // Ensure processing respects workflow classification requirements
-        console.log(`Processing step ${step.id} with classification requirement: ${workflow.requiredClassification}`);
-      }
-
-      // Execute the appropriate processor
-      const result = await this.executeStepProcessor(step, stepInputs, processingContext);
-
+      stepResult.status = 'COMPLETED';
+      stepResult.endTime = Date.now();
       stepResult.output = result.output;
       stepResult.confidence = result.confidence;
       stepResult.metadata = result.metadata;
-      stepResult.status = 'COMPLETED';
-      stepResult.endTime = Date.now();
 
-      // Store outputs for dependent steps
       this.storeStepOutputs(execution, step, result.output);
+      execution.metrics.stepDurations[step.id] = (stepResult.endTime || Date.now()) - stepResult.startTime;
 
-      execution.metrics.stepDurations[step.id] = stepResult.endTime - stepResult.startTime;
-
+      if (step.type === 'REPORT') {
+        execution.metrics.reportsGenerated += 1;
+      }
+      if (step.type === 'ALERT') {
+        execution.metrics.alertsGenerated += 1;
+      }
     } catch (error) {
       stepResult.status = 'FAILED';
-      stepResult.error = error.message;
       stepResult.endTime = Date.now();
+      stepResult.error = error instanceof Error ? error.message : String(error);
+      execution.errors.push({
+        stepId: step.id,
+        message: stepResult.error,
+        severity: 'ERROR',
+        timestamp: Date.now(),
+        context: { workflowId: workflow.id }
+      });
       throw error;
     }
   }
-
-  // =============================================================================
-  // STEP PROCESSORS
-  // =============================================================================
 
   /**
    * Execute the appropriate processor for a workflow step
@@ -595,15 +588,24 @@ export class IntelligenceWorkflowEngine {
     let totalConfidence = 0;
 
     for (const intelItem of intel) {
-      // Convert Intel to IntelReportData with analysis
+      const content = typeof intelItem.data === 'string'
+        ? intelItem.data
+        : JSON.stringify(intelItem.data ?? {});
+
       const reportData: IntelReportData = {
-        ...intelItem,
-        summary: `Automated analysis of ${intelItem.title || intelItem.source?.primary || 'intelligence item'}`,
-        reliability: 'C', // Default reliability score
+        id: intelItem.id,
+        title: `Intel ${intelItem.id}`,
+        content,
+        tags: intelItem.tags || [],
+        timestamp: intelItem.timestamp || Date.now(),
+        author: intelItem.collectedBy || 'unknown',
+        summary: `Automated analysis of ${intelItem.id}`,
+        reliability: intelItem.reliability === 'X' ? 'F' : intelItem.reliability || 'C',
+        qualityAssessment: intelItem.qualityAssessment,
         processingHistory: [{
-          stage: 'approved' as const,
+          stage: 'approved',
           timestamp: new Date().toISOString(),
-          processedBy: context?.analyst || 'automated-system',
+          processedBy: context?.analystId || 'automated-system',
           notes: 'Processed via intelligence workflow engine'
         }]
       };
@@ -639,7 +641,7 @@ export class IntelligenceWorkflowEngine {
     context?: AnalysisContext
   ): Promise<{ output: StepOutput; confidence: number; metadata: StepMetadata }> {
     
-    const processedIntel = inputs.processedIntel as Intelligence[] || [];
+    const processedIntel = inputs.processedIntel as Intel[] || [];
     const correlations = await this.findIntelCorrelations(processedIntel);
     const patterns = await this.identifyPatterns(processedIntel);
     const relationships = await this.mapRelationships(processedIntel);
@@ -1307,7 +1309,7 @@ export class IntelligenceWorkflowEngine {
   /**
    * Find correlations between intelligence items
    */
-  private async findIntelCorrelations(intel: Intelligence[]): Promise<CorrelationResult[]> {
+  private async findIntelCorrelations(intel: Intel[]): Promise<CorrelationResult[]> {
     const correlations: CorrelationResult[] = [];
     
     for (let i = 0; i < intel.length; i++) {
@@ -1349,7 +1351,7 @@ export class IntelligenceWorkflowEngine {
   /**
    * Identify patterns in intelligence data
    */
-  private async identifyPatterns(intel: Intelligence[]): Promise<PatternResult[]> {
+  private async identifyPatterns(intel: Intel[]): Promise<PatternResult[]> {
     const patterns: PatternResult[] = [];
     
     // Frequency pattern analysis
@@ -1409,7 +1411,7 @@ export class IntelligenceWorkflowEngine {
   /**
    * Map relationships between entities in intelligence
    */
-  private async mapRelationships(intel: Intelligence[]): Promise<RelationshipResult[]> {
+  private async mapRelationships(intel: Intel[]): Promise<RelationshipResult[]> {
     const relationships: RelationshipResult[] = [];
     
     // Extract entities from content (simplified)
@@ -1469,7 +1471,7 @@ export class IntelligenceWorkflowEngine {
     context?: AnalysisContext
   ): Promise<{ output: StepOutput; confidence: number; metadata: StepMetadata }> {
     
-    const processedIntel = inputs.processedIntel as Intelligence[] || [];
+    const processedIntel = inputs.processedIntel as Intel[] || [];
     const assessments: ThreatAssessment[] = [];
     const opportunities: string[] = [];
     
@@ -1506,28 +1508,18 @@ export class IntelligenceWorkflowEngine {
     inputs: StepOutput, 
     context?: AnalysisContext
   ): Promise<{ output: StepOutput; confidence: number; metadata: StepMetadata }> {
-    
-    const processedIntel = inputs.processedIntel as Intelligence[] || [];
+    const processedIntel = inputs.processedIntel as IntelReportData[] || [];
     const threatAssessments = inputs.threatAssessments as ThreatAssessment[] || [];
-    
+    const now = Date.now();
+
     const reportData: IntelReportData = {
-      id: `report_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-      title: `Intelligence Report - ${new Date().toISOString().split('T')[0]}`,
+      id: `report_${now}_${Math.random().toString(36).substr(2, 6)}`,
+      title: `Intelligence Report - ${new Date(now).toISOString().split('T')[0]}`,
       content: `Analysis of ${processedIntel.length} intelligence items`,
-      reportType: 'ANALYSIS_REPORT',
-      reportNumber: `RPT-${Date.now()}`,
-      version: '1.0',
-      classification: {
-        level: 'SECRET',
-        compartments: [],
-        disseminationControls: [],
-        handlingCaveats: [],
-        releasabilityTo: []
-      },
-      distributionType: 'ROUTINE',
-      distributionList: [],
-      handlingInstructions: [],
-      executiveSummary: `Automated analysis of intelligence collected from multiple sources`,
+      tags: [],
+      timestamp: now,
+      author: context?.analystId || 'automated-system',
+      executiveSummary: 'Automated analysis of intelligence collected from multiple sources',
       keyFindings: threatAssessments.map(threat => 
         `${threat.type} threat identified with ${threat.likelihood}% likelihood`
       ),
@@ -1535,53 +1527,9 @@ export class IntelligenceWorkflowEngine {
       conclusions: 'Analysis provides tactical and strategic insights',
       recommendations: [],
       intelligenceGaps: [],
-      sources: processedIntel.map(intel => ({
-        primary: intel.source,
-        method: 'AUTOMATED',
-        platform: 'CYBER',
-        quality: 'VERIFIED',
-        sourceId: intel.id,
-        collectionDate: intel.timestamp,
-        custodyChain: [intel.collectedBy],
-        lastHandler: intel.collectedBy,
-        confidence: this.calculateIntelConfidence(intel),
-        completeness: 85,
-        timeliness: 90
-      })),
-      sourceSummary: `Analysis based on ${processedIntel.length} sources`,
-      collectionDisciplines: processedIntel.map(intel => intel.source),
-      geographicScope: {
-        type: 'REGIONAL'
-      },
-      timeframe: {
-        start: Math.min(...processedIntel.map(intel => intel.timestamp)),
-        end: Math.max(...processedIntel.map(intel => intel.timestamp))
-      },
-      relatedReports: [],
-      threatAssessments: [],
-      riskAssessments: [],
-      attachments: [],
-      confidence: 85,
-      reliabilityScore: 80,
-      completeness: 75,
-      timeliness: 90,
-      status: 'DRAFT',
-      workflowSteps: [],
-      approvalChain: [],
-      author: context?.analyst || 'automated-system',
-      contributors: [],
-      reviewedBy: [],
-      approvedBy: '',
-      publishedTo: [],
-      accessLog: [],
-      feedback: [],
-      viewCount: 0,
-      downloadCount: 0,
-      citationCount: 0,
-      tags: [],
-      timestamp: Date.now()
+      sources: []
     };
-    
+
     return {
       output: {
         report: reportData,
@@ -1607,17 +1555,13 @@ export class IntelligenceWorkflowEngine {
     const report = inputs.report as IntelReportData;
     const priority = context?.priority || 'MEDIUM';
     
-    // Determine dissemination list based on classification and priority
-    const recipients: string[] = [];
-    
-    if (report?.classification.level === 'TOP_SECRET') {
-      recipients.push('clearance-ts-analysts', 'operations-command');
-    } else if (report?.classification.level === 'SECRET') {
-      recipients.push('cleared-analysts', 'field-commanders');
-    }
-    
+    // Determine dissemination list based on priority
+    const recipients: string[] = ['cleared-analysts'];
+
     if (priority === 'CRITICAL') {
       recipients.push('emergency-response-team', 'senior-leadership');
+    } else if (priority === 'HIGH') {
+      recipients.push('operations-command');
     }
     
     return {
@@ -1644,7 +1588,7 @@ export class IntelligenceWorkflowEngine {
   ): Promise<{ output: StepOutput; confidence: number; metadata: StepMetadata }> {
     
     const threatAssessments = inputs.threatAssessments as ThreatAssessment[] || [];
-    const processedIntel = inputs.processedIntel as Intelligence[] || [];
+    const processedIntel = inputs.processedIntel as Intel[] || [];
     const priority = context?.priority || 'MEDIUM';
     
     const alerts: IntelAlert[] = [];

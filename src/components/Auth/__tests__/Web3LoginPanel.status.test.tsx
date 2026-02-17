@@ -38,7 +38,7 @@ describe('Web3LoginPanel storage status and receipt link', () => {
     localStorage.clear();
   });
 
-  it('shows Serverless Pin status when relay is unavailable and serverless is enabled', async () => {
+  it('does not render serverless pin status chip in current auth UI', async () => {
     // Simulate healthy serverless pin
     localStorage.setItem('serverless_pin_ok', 'true');
 
@@ -57,11 +57,11 @@ describe('Web3LoginPanel storage status and receipt link', () => {
 
     renderWithAuth(<Web3LoginPanel />, ctx);
 
-    const chip = await screen.findByText(/IPFS: Serverless Pin/i);
-    expect(chip).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Login' })).toBeInTheDocument();
+    expect(screen.queryByText(/IPFS: Serverless Pin/i)).not.toBeInTheDocument();
   });
 
-  it('marks status as unhealthy when pre-check failed', async () => {
+  it('does not render unhealthy storage chip when pre-check failed', async () => {
     localStorage.setItem('serverless_pin_ok', 'false');
 
     const ctx: any = {
@@ -79,9 +79,8 @@ describe('Web3LoginPanel storage status and receipt link', () => {
 
     renderWithAuth(<Web3LoginPanel />, ctx);
 
-    const chip = await screen.findByText(/IPFS: Serverless Pin/i);
-    expect(chip).toBeInTheDocument();
-    expect(chip).toHaveAttribute('title', expect.stringMatching(/unhealthy/i));
+    expect(await screen.findByRole('button', { name: 'Login' })).toBeInTheDocument();
+    expect(screen.queryByText(/IPFS: Serverless Pin/i)).not.toBeInTheDocument();
   });
 
   it('renders Last Login CID link when stored', async () => {

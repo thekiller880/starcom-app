@@ -22,6 +22,7 @@ export interface IntelEntity {
   attributes: Record<string, unknown>;
   // Backwards compatibility for older adapters/tests
   properties?: Record<string, unknown>;
+  classification?: string;
   relationships: IntelRelationship[];
 }
 

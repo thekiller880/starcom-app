@@ -39,35 +39,35 @@ export function createLazyComponent(importFn: () => Promise<any>, name?: string)
  */
 export const LazyHUDComponents = {
   TopBar: createLazyComponent(
-    () => import('../components/HUD/Bars/TopBar/TopBar'),
+    () => import('../components/HUD/Bars/CyberCommandTopBar/CyberCommandTopBar'),
     'TopBar'
   ),
   BottomBar: createLazyComponent(
-    () => import('../components/HUD/Bars/BottomBar/BottomBar'),
+    () => import('../components/HUD/Bars/CyberCommandBottomBar/CyberCommandBottomBar'),
     'BottomBar'
   ),
   LeftSideBar: createLazyComponent(
-    () => import('../components/HUD/Bars/LeftSideBar/LeftSideBar'),
+    () => import('../components/HUD/Bars/CyberCommandLeftSideBar/CyberCommandLeftSideBar'),
     'LeftSideBar'
   ),
   RightSideBar: createLazyComponent(
-    () => import('../components/HUD/Bars/RightSideBar/RightSideBar'),
+    () => import('../components/HUD/Bars/CyberCommandRightSideBar/CyberCommandRightSideBar'),
     'RightSideBar'
   ),
   TopLeftCorner: createLazyComponent(
-    () => import('../components/HUD/Corners/TopLeft/TopLeft'),
+    () => import('../components/HUD/Corners/CyberCommandTopLeft/CyberCommandTopLeft'),
     'TopLeft Corner'
   ),
   TopRightCorner: createLazyComponent(
-    () => import('../components/HUD/Corners/TopRight/TopRight'),
+    () => import('../components/HUD/Corners/CyberCommandTopRight/CyberCommandTopRight'),
     'TopRight Corner'
   ),
   BottomLeftCorner: createLazyComponent(
-    () => import('../components/HUD/Corners/BottomLeft/BottomLeft'),
+    () => import('../components/HUD/Corners/CyberCommandBottomLeft/CyberCommandBottomLeft'),
     'BottomLeft Corner'
   ),
   BottomRightCorner: createLazyComponent(
-    () => import('../components/HUD/Corners/BottomRight/BottomRight'),
+    () => import('../components/HUD/Corners/CyberCommandBottomRight/CyberCommandBottomRight'),
     'BottomRight Corner'
   ),
   FloatingPanelManager: createLazyComponent(
@@ -83,7 +83,7 @@ export const LazyHUDComponents = {
     'NOAA Integration'
   ),
   CenterViewManager: createLazyComponent(
-    () => import('../components/HUD/Center/CenterViewManager'),
+    () => import('../components/HUD/CyberCommandCenter/CyberCommandCenterManager'),
     'Center View'
   ),
   QuickAccessPanel: createLazyComponent(
@@ -94,6 +94,18 @@ export const LazyHUDComponents = {
     () => import('../components/HUD/NewUserHint/NewUserHint'),
     'User Hints'
   ),
+  GeoIntFilters: createLazyComponent(
+    () => import('../components/IntelReports3D/HUD/GeoIntFilters'),
+    'GeoInt Filters'
+  ),
+  GeoIntStatusPill: createLazyComponent(
+    () => import('../components/IntelReports3D/HUD/GeoIntStatusPill'),
+    'GeoInt Status'
+  ),
+  IntelReportsPanel: createLazyComponent(
+    () => import('../components/IntelReports3D/HUD/IntelReportsPanel'),
+    'Intel Reports Panel'
+  ),
 };
 
 /**
@@ -102,9 +114,9 @@ export const LazyHUDComponents = {
  */
 export const preloadCriticalHUDComponents = async (): Promise<void> => {
   const criticalComponents = [
-    () => import('../components/HUD/Bars/TopBar/TopBar'),
-    () => import('../components/HUD/Bars/BottomBar/BottomBar'),
-    () => import('../components/HUD/Center/CenterViewManager'),
+    () => import('../components/HUD/Bars/CyberCommandTopBar/CyberCommandTopBar'),
+    () => import('../components/HUD/Bars/CyberCommandBottomBar/CyberCommandBottomBar'),
+    () => import('../components/HUD/CyberCommandCenter/CyberCommandCenterManager'),
   ];
 
   try {

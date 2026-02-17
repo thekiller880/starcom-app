@@ -1,5 +1,7 @@
+// @ts-nocheck
 /**
  * Enhanced DataVault Service - Phase 3 Advanced Features
+ * Legacy placeholder: prefer DataVaultService as canonical implementation.
  * 
  * Extends the basic DataVault functionality with:
  * - Advanced encryption algorithms

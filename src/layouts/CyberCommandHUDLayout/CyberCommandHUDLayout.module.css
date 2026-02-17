@@ -1,4 +1,9 @@
 .cyberCommandHudLayout {
+  --primary-rail-width: 32px;
+  --sub-rail-width: 36px;
+}
+
+.cyberCommandHudLayout {
   height: 100vh;
   width: 100vw; /* Ensure full width of the viewport */
   position: relative;
@@ -101,8 +106,18 @@
   z-index: 1001; /* Match the LeftSideBar component z-index */
   top: 0;
   left: 0;
-  width: 128px; /* Match the actual LeftSideBar width */
+  width: var(--primary-rail-width);
   bottom: 0; /* Stretch all the way to bottom - no BottomBar interference */
+}
+
+.leftSubRail {
+  position: absolute;
+  z-index: 1000;
+  top: 12%;
+  bottom: 12%;
+  left: calc(var(--primary-rail-width) + 8px);
+  width: var(--sub-rail-width);
+  pointer-events: auto;
 }
 
 .rightSideBar {
@@ -110,36 +125,47 @@
   right: 0;
   top: 0;
   bottom: 0;
-  width: auto; /* Let the sidebar component control its own width */
+  width: var(--primary-rail-width);
   z-index: 1000; /* Higher z-index for proper layering */
   pointer-events: auto;
 }
 
 /* Adjust sidebars for embedded mode */
 .embeddedMode .leftSideBar {
-  width: 128px;
+  width: var(--primary-rail-width);
+}
+
+.embeddedMode .leftSubRail {
+  left: calc(var(--primary-rail-width) + 8px);
+  width: var(--sub-rail-width);
 }
 
 .embeddedMode .rightSideBar {
-  width: auto;
+  width: var(--primary-rail-width);
 }
 
 .center {
   position: absolute;
   top: 5%; /* Below TopBar */
-  left: 128px; /* Right of LeftSideBar (128px wide) */
-  right: 120px; /* Left of RightSideBar (120px wide) */
+  right: var(--primary-rail-width);
   bottom: 0; /* Extend to bottom - no BottomBar */
   overflow: hidden;
   pointer-events: auto;
   z-index: 1; /* Base layer */
 }
 
+.centerWithSubRail {
+  left: calc(var(--primary-rail-width) + var(--sub-rail-width) + 8px);
+}
+
+.centerNoSubRail {
+  left: var(--primary-rail-width);
+}
+
 /* Adjust center area for embedded mode */
 .embeddedMode .center {
   top: 5%; /* Below TopBar */
-  left: 128px;
-  right: 120px;
+  right: var(--primary-rail-width);
   bottom: 0; /* Extend to bottom - no embedded BottomBar */
   position: absolute;
 }
@@ -174,21 +200,48 @@
 
 /* Responsive adjustments for smaller screens */
 @media (max-width: 1200px) {
-  .center {
-    left: 110px; /* Maintain LeftSideBar width */
-    right: 100px; /* Smaller right margin on smaller screens */
+  .cyberCommandHudLayout {
+    --primary-rail-width: 30px;
+    --sub-rail-width: 34px;
+  }
+
+  .centerWithSubRail {
+    left: calc(var(--primary-rail-width) + var(--sub-rail-width) + 8px);
+  }
+
+  .centerNoSubRail {
+    left: var(--primary-rail-width);
   }
 }
 
 @media (max-width: 768px) {
+  .cyberCommandHudLayout {
+    --primary-rail-width: 28px;
+    --sub-rail-width: 32px;
+  }
+
   .leftSideBar {
-    width: 100px; /* Smaller LeftSideBar on mobile */
+    width: var(--primary-rail-width);
+  }
+
+  .leftSubRail {
+    left: calc(var(--primary-rail-width) + 6px);
+    width: var(--sub-rail-width);
+    top: 14%;
+    bottom: 14%;
   }
   
   .center {
     top: 8%; /* More space for mobile top bar */
-    left: 100px; /* Match mobile LeftSideBar width */
-    right: 60px;
+    right: var(--primary-rail-width);
     bottom: 0; /* Extend to bottom - no BottomBar */
+  }
+
+  .centerWithSubRail {
+    left: calc(var(--primary-rail-width) + var(--sub-rail-width) + 6px);
+  }
+
+  .centerNoSubRail {
+    left: var(--primary-rail-width);
   }
 }

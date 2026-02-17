@@ -36,10 +36,28 @@ type LoopTelemetryEvent =
   | { type: 'slow_handler_backoff'; durationMs: number; backoffMs: number }
   | { type: 'loop_tick'; durationMs: number; delayMs: number };
 
+interface EventLoopStats {
+  tickCount: number;
+  processedEvents: number;
+  droppedEvents: number;
+  maxQueueDepth: number;
+  lastTickDurationMs: number;
+  lastScheduledDelayMs: number;
+  running: boolean;
+  queueDepth: number;
+  subscriptions: number;
+}
+
 export class RealTimeEventSystem {
   private static instance: RealTimeEventSystem;
   private subscriptions: Map<string, EventSubscription> = new Map();
-  private eventQueue: UIUpdateEvent[] = [];
+  private readonly priorityBuckets: Record<UIUpdateEvent['priority'], UIUpdateEvent[]> = {
+    critical: [],
+    high: [],
+    normal: [],
+    low: []
+  };
+  private readonly priorityOrder: UIUpdateEvent['priority'][] = ['critical', 'high', 'normal', 'low'];
   private isProcessing = false;
   private soundEnabled = true;
   private notificationBadgeElement: HTMLElement | null = null;
@@ -49,6 +67,17 @@ export class RealTimeEventSystem {
   private readonly idleIntervalMs = 400;
   private readonly slowHandlerThresholdMs = 24;
   private onLoopTelemetry?: (event: LoopTelemetryEvent) => void;
+  private stats: EventLoopStats = {
+    tickCount: 0,
+    processedEvents: 0,
+    droppedEvents: 0,
+    maxQueueDepth: 0,
+    lastTickDurationMs: 0,
+    lastScheduledDelayMs: 0,
+    running: false,
+    queueDepth: 0,
+    subscriptions: 0
+  };
 
   public static getInstance(): RealTimeEventSystem {
     if (!RealTimeEventSystem.instance) {
@@ -69,8 +98,16 @@ export class RealTimeEventSystem {
     this.onLoopTelemetry = handler;
   }
 
+  public getLoopStats(): EventLoopStats {
+    return {
+      ...this.stats,
+      running: this.loopTimer !== null,
+      queueDepth: this.getQueueLength(),
+      subscriptions: this.subscriptions.size
+    };
+  }
+
   private constructor() {
-    this.startEventProcessor();
     this.initializeBadgeElement();
   }
 
@@ -91,10 +128,16 @@ export class RealTimeEventSystem {
     };
 
     this.subscriptions.set(id, subscription);
+    this.stats.subscriptions = this.subscriptions.size;
 
     // Return unsubscribe function
     return () => {
       this.subscriptions.delete(id);
+      this.stats.subscriptions = this.subscriptions.size;
+
+      if (this.subscriptions.size === 0 && this.getQueueLength() === 0) {
+        this.stopEventProcessor();
+      }
     };
   }
 
@@ -102,7 +145,13 @@ export class RealTimeEventSystem {
    * Emit a UI update event
    */
   public emit(event: UIUpdateEvent): void {
-    this.eventQueue.push(event);
+    this.priorityBuckets[event.priority].push(event);
+    const queueDepth = this.getQueueLength();
+    this.stats.queueDepth = queueDepth;
+    if (queueDepth > this.stats.maxQueueDepth) {
+      this.stats.maxQueueDepth = queueDepth;
+    }
+
     if (this.loopTimer === null) {
       this.scheduleLoop(0);
     }
@@ -255,15 +304,18 @@ export class RealTimeEventSystem {
     }
   }
 
-  /**
-   * Start the event processor
-   */
-  private startEventProcessor(): void {
-    this.scheduleLoop(this.baseIntervalMs);
+  private stopEventProcessor(): void {
+    if (this.loopTimer !== null) {
+      clearTimeout(this.loopTimer);
+      this.loopTimer = null;
+    }
+    this.stats.running = false;
   }
 
   private scheduleLoop(delay: number): void {
     if (this.loopTimer !== null) return;
+    this.stats.lastScheduledDelayMs = delay;
+    this.stats.running = true;
     this.loopTimer = window.setTimeout(() => {
       this.loopTimer = null;
       this.tickEventLoop();
@@ -274,6 +326,10 @@ export class RealTimeEventSystem {
     const start = performance.now();
     const processed = this.processEventQueue();
     const duration = performance.now() - start;
+    this.stats.tickCount += 1;
+    this.stats.lastTickDurationMs = duration;
+    const remainingQueue = this.getQueueLength();
+    this.stats.queueDepth = remainingQueue;
 
     if (duration > this.slowHandlerThresholdMs) {
       this.backoffMs = Math.min(1000, Math.max(this.baseIntervalMs * 2, this.backoffMs * 2 || this.baseIntervalMs * 2));
@@ -284,47 +340,74 @@ export class RealTimeEventSystem {
 
     let nextDelay = this.backoffMs || this.baseIntervalMs;
 
-    if (processed === 0 && this.eventQueue.length === 0) {
+    if (processed === 0 && remainingQueue === 0) {
       nextDelay = Math.max(nextDelay, this.idleIntervalMs);
       this.emitLoopTelemetry({ type: 'idle_sleep', delayMs: nextDelay });
-    } else if (this.eventQueue.length > 0) {
+    } else if (remainingQueue > 0) {
       nextDelay = Math.min(nextDelay, 50);
     }
 
     if (processed > 0) {
-      this.emitLoopTelemetry({ type: 'batch_processed', processed, remaining: this.eventQueue.length, delayMs: nextDelay });
+      this.emitLoopTelemetry({ type: 'batch_processed', processed, remaining: remainingQueue, delayMs: nextDelay });
     }
 
     this.emitLoopTelemetry({ type: 'loop_tick', durationMs: duration, delayMs: nextDelay });
 
-    this.scheduleLoop(nextDelay);
+    if (remainingQueue > 0) {
+      this.scheduleLoop(nextDelay);
+      return;
+    }
+
+    this.stopEventProcessor();
   }
 
   /**
    * Process the event queue
    */
   private processEventQueue(): number {
-    if (this.isProcessing || this.eventQueue.length === 0) return 0;
+    const queueLength = this.getQueueLength();
+    if (this.isProcessing || queueLength === 0) return 0;
 
     this.isProcessing = true;
 
-    // Sort by priority and timestamp
-    this.eventQueue.sort((a, b) => {
-      const priorityOrder = { critical: 3, high: 2, normal: 1, low: 0 };
-      const priorityDiff = priorityOrder[b.priority] - priorityOrder[a.priority];
-      if (priorityDiff !== 0) return priorityDiff;
-      return b.timestamp.getTime() - a.timestamp.getTime();
-    });
-
-    const batchSize = Math.min(10, Math.max(1, Math.ceil(this.eventQueue.length / 2)));
-
-    const eventsToProcess = this.eventQueue.splice(0, batchSize);
+    const batchSize = Math.min(10, Math.max(1, Math.ceil(queueLength / 2)));
+    const eventsToProcess = this.dequeueBatch(batchSize);
     eventsToProcess.forEach(event => {
       this.processEvent(event);
     });
+    this.stats.processedEvents += eventsToProcess.length;
+    this.stats.queueDepth = this.getQueueLength();
 
     this.isProcessing = false;
     return eventsToProcess.length;
+  }
+
+  private dequeueBatch(batchSize: number): UIUpdateEvent[] {
+    const batch: UIUpdateEvent[] = [];
+
+    for (const priority of this.priorityOrder) {
+      const bucket = this.priorityBuckets[priority];
+
+      while (bucket.length > 0 && batch.length < batchSize) {
+        const nextEvent = bucket.pop();
+        if (nextEvent) {
+          batch.push(nextEvent);
+        }
+      }
+
+      if (batch.length >= batchSize) {
+        break;
+      }
+    }
+
+    return batch;
+  }
+
+  private getQueueLength(): number {
+    return this.priorityBuckets.critical.length
+      + this.priorityBuckets.high.length
+      + this.priorityBuckets.normal.length
+      + this.priorityBuckets.low.length;
   }
 
   /**
@@ -495,8 +578,23 @@ export class RealTimeEventSystem {
    */
   public reset(): void {
     this.subscriptions.clear();
-    this.eventQueue = [];
+    this.priorityBuckets.critical = [];
+    this.priorityBuckets.high = [];
+    this.priorityBuckets.normal = [];
+    this.priorityBuckets.low = [];
     this.isProcessing = false;
+    this.stopEventProcessor();
+    this.stats = {
+      tickCount: 0,
+      processedEvents: 0,
+      droppedEvents: 0,
+      maxQueueDepth: 0,
+      lastTickDurationMs: 0,
+      lastScheduledDelayMs: 0,
+      running: false,
+      queueDepth: 0,
+      subscriptions: 0
+    };
   }
 }
 

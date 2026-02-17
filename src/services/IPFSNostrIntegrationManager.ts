@@ -365,6 +365,10 @@ export class IPFSNostrIntegrationManager {
     }
     
     this.syncTimer = setInterval(async () => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
+
       try {
         await this.performSync();
       } catch (error) {
@@ -382,6 +386,10 @@ export class IPFSNostrIntegrationManager {
     }
     
     this.healthCheckTimer = setInterval(async () => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
+
       try {
         await this.checkNetworkHealth();
       } catch (error) {

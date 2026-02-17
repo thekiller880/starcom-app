@@ -172,6 +172,9 @@ export interface LegacyIntelReport {
   long?: number; // legacy alias
 }
 
+// Temporary alias to satisfy downstream imports expecting IntelReport
+export type IntelReport = LegacyIntelReport;
+
 // =============================================================================
 // SUPPORTING INTERFACES
 // =============================================================================

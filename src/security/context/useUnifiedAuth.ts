@@ -4,7 +4,7 @@
  */
 
 import { useContext } from 'react';
-import UnifiedAuthContext from './AuthContext';
+import { UnifiedAuthContext } from './AuthContext';
 import type { UnifiedAuthContextType } from './AuthContext';
 
 // TODO: Add comprehensive security event correlation and analysis - PRIORITY: MEDIUM

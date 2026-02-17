@@ -125,7 +125,7 @@ const SupportFunnelModal: React.FC<SupportFunnelModalProps> = ({
             </button>
           </div>
           <ul className={styles.ctaBullets}>
-            <li>Starcom runs secure, independent communications, public info gathering tools, and a global network of operatives.</li>
+            <li>Starcom runs secure communications, intel tools, and a global operative network.</li>
             <li>Access to the ops channel is invite-only to keep conversations focused and protected.</li>
             <li>Your support keeps our servers running and the network strong against interference.</li>
           </ul>

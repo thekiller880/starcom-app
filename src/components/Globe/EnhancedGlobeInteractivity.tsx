@@ -10,6 +10,7 @@ import { useIntelReportInteractivity } from '../../hooks/useIntelReportInteracti
 import { IntelReportTooltip } from '../ui/IntelReportTooltip/IntelReportTooltip';
 import { IntelReportPopup } from '../ui/IntelReportPopup/IntelReportPopup';
 import { EnhancedTeamCollaborationService } from '../../services/collaboration/EnhancedTeamCollaborationService';
+import { latLngToGlobeVector3, vector3ToLatLng } from '../../utils/globeCoordinates';
 
 interface EnhancedGlobeInteractivityProps {
   globeRef: React.RefObject<any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -51,6 +52,21 @@ interface ModelInstance {
   hoverOffset: number;
   localRotationY: number;
 }
+
+const isSphereLikeMesh = (object: unknown): object is THREE.Mesh => {
+  if (!object || typeof object !== 'object') return false;
+  const candidate = object as {
+    isMesh?: boolean;
+    geometry?: { constructor?: { name?: string } };
+  };
+  const looksLikeMesh = candidate.isMesh === true || object instanceof THREE.Mesh;
+  const geometry = candidate.geometry;
+  const looksLikeSphere = !!geometry && (
+    geometry instanceof THREE.SphereGeometry ||
+    geometry.constructor?.name === 'SphereGeometry'
+  );
+  return looksLikeMesh && looksLikeSphere;
+};
 
 export const EnhancedGlobeInteractivity: React.FC<EnhancedGlobeInteractivityProps> = ({
   globeRef,
@@ -178,14 +194,7 @@ export const EnhancedGlobeInteractivity: React.FC<EnhancedGlobeInteractivityProp
       const lng = model.report.longitude;
       const globeRadius = 100; // Should match the globe radius
 
-      const phi = (90 - lat) * (Math.PI / 180);
-      const theta = (lng + 180) * (Math.PI / 180);
-      
-      const surfaceX = -(globeRadius * Math.sin(phi) * Math.cos(theta));
-      const surfaceZ = globeRadius * Math.sin(phi) * Math.sin(theta);
-      const surfaceY = globeRadius * Math.cos(phi);
-
-      const surfacePosition = new THREE.Vector3(surfaceX, surfaceY, surfaceZ);
+      const surfacePosition = latLngToGlobeVector3(lat, lng, globeRadius);
       const modelPosition = model.positionContainer.position.clone();
 
       // Create line geometry
@@ -221,6 +230,12 @@ export const EnhancedGlobeInteractivity: React.FC<EnhancedGlobeInteractivityProp
   // Handle Intel Report creation with team collaboration
   const handleCreateIntelReport = useCallback(async (lat: number, lng: number) => {
     console.log('Creating Intel Report at coordinates:', { lat, lng });
+
+    const safeAlert = (message: string) => {
+      if (typeof globalThis !== 'undefined' && typeof globalThis.alert === 'function') {
+        globalThis.alert(message);
+      }
+    };
     
     try {
       // Import IntelReportService dynamically to handle the report creation
@@ -300,7 +315,7 @@ export const EnhancedGlobeInteractivity: React.FC<EnhancedGlobeInteractivityProp
                      `• Can be added to intel packages\n` +
                      `• Blockchain provenance enabled${teamNotification}`;
       
-      alert(message);
+      safeAlert(message);
       
       // TODO: Integrate with team collaboration service to notify team members
       // TODO: Automatically add to current team's active intel package if available
@@ -313,7 +328,7 @@ export const EnhancedGlobeInteractivity: React.FC<EnhancedGlobeInteractivityProp
       
     } catch (error) {
       console.error('Failed to create Intel Report:', error);
-      alert(`Failed to create Intel Report: ${error instanceof Error ? error.message : 'Unknown error'}\n\nNote: Team collaboration features may require wallet connection.`);
+      safeAlert(`Failed to create Intel Report: ${error instanceof Error ? error.message : 'Unknown error'}\n\nNote: Team collaboration features may require wallet connection.`);
     }
   }, [collaborationService, currentTeam, publicKey]);
 
@@ -435,8 +450,7 @@ export const EnhancedGlobeInteractivity: React.FC<EnhancedGlobeInteractivityProp
     // Find globe mesh (sphere geometry) for surface position
     let globeMesh: THREE.Mesh | null = null;
     scene.traverse((child) => {
-      if (child instanceof THREE.Mesh && 
-          child.geometry instanceof THREE.SphereGeometry) {
+      if (isSphereLikeMesh(child)) {
         globeMesh = child;
       }
     });
@@ -456,10 +470,9 @@ export const EnhancedGlobeInteractivity: React.FC<EnhancedGlobeInteractivityProp
       const intersectionPoint = globeIntersects[0].point;
       
       // Convert 3D point to lat/lng for hover position
-      const radius = 100; // Globe radius
-      const lat = 90 - (Math.acos(intersectionPoint.y / radius) * 180 / Math.PI);
-      const lng = ((270 + (Math.atan2(intersectionPoint.x, intersectionPoint.z) * 180 / Math.PI)) % 360) - 180;
-      
+      const radius = intersectionPoint.length() || 100;
+      const { lat, lng } = vector3ToLatLng(intersectionPoint, radius);
+
       setGlobeHoverPosition({ lat, lng });
 
       // Update mouse position indicator
@@ -507,17 +520,76 @@ export const EnhancedGlobeInteractivity: React.FC<EnhancedGlobeInteractivityProp
     }
   }, [globeRef, containerRef, visualizationMode, models, hoveredReport, handleModelHover, onHoverChange, mousePositionIndicator, dragThreshold]);
 
+  const resolveGlobeClickPosition = useCallback(() => {
+    if (globeHoverPosition) {
+      return globeHoverPosition;
+    }
+
+    if (!globeRef.current || !containerRef.current) {
+      return null;
+    }
+
+    const rect = containerRef.current.getBoundingClientRect();
+    const width = rect.width || containerRef.current.clientWidth || 1;
+    const height = rect.height || containerRef.current.clientHeight || 1;
+    const x = interactionState.currentPos.x || interactionState.dragStartPos.x;
+    const y = interactionState.currentPos.y || interactionState.dragStartPos.y;
+
+    const normalizedMouse = new THREE.Vector2(
+      (x / width) * 2 - 1,
+      -(y / height) * 2 + 1
+    );
+
+    const globeObj = globeRef.current as unknown as {
+      scene: () => THREE.Scene;
+      camera: () => THREE.Camera;
+    };
+
+    const scene = globeObj?.scene();
+    const camera = globeObj?.camera();
+    if (!scene || !camera) {
+      return null;
+    }
+
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(normalizedMouse, camera);
+
+    let globeMesh: THREE.Mesh | null = null;
+    scene.traverse((child) => {
+      if (isSphereLikeMesh(child)) {
+        globeMesh = child;
+      }
+    });
+
+    if (!globeMesh) {
+      return null;
+    }
+
+    const intersections = raycaster.intersectObject(globeMesh);
+    if (!intersections.length) {
+      return null;
+    }
+
+    const point = intersections[0].point;
+    const radius = point.length() || 100;
+    return vector3ToLatLng(point, radius);
+  }, [globeHoverPosition, globeRef, containerRef, interactionState.currentPos.x, interactionState.currentPos.y, interactionState.dragStartPos.x, interactionState.dragStartPos.y]);
+
   // Separated click handler for cleaner logic
   const handleActualClick = useCallback(() => {
     if (hoveredReport) {
       console.log('Clicking Intel Report:', hoveredReport.title);
       handleModelClick(hoveredReport);
-    } else if (globeHoverPosition) {
+    } else {
+      const clickPosition = resolveGlobeClickPosition();
+      if (!clickPosition) {
+        return;
+      }
       // Create new Intel Report at clicked position
-      console.log('Creating Intel Report at:', globeHoverPosition);
-      handleCreateIntelReport(globeHoverPosition.lat, globeHoverPosition.lng);
+      console.log('Creating Intel Report at:', clickPosition);
+      handleCreateIntelReport(clickPosition.lat, clickPosition.lng);
     }
-  }, [hoveredReport, handleModelClick, globeHoverPosition, handleCreateIntelReport]);
+  }, [hoveredReport, handleModelClick, resolveGlobeClickPosition, handleCreateIntelReport]);
 
   const handleMouseUp = useCallback((event?: MouseEvent) => {
     if (!containerRef.current) return;

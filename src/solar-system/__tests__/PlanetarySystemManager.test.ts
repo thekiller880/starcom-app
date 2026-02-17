@@ -1,27 +1,27 @@
 // PlanetarySystemManager.test.ts - TDD specifications for planetary system core
 
-import { describe, test, expect, beforeEach, vi } from 'vitest';
+import { describe, test, expect, beforeEach } from '@jest/globals';
 import * as THREE from 'three';
 import { PlanetarySystemManager } from '../PlanetarySystemManager';
 import { ScaleContext } from '../types/ScaleContext';
 
 // Mock THREE.js objects for testing
 const mockScene = {
-  add: vi.fn(),
-  remove: vi.fn(),
+  add: jest.fn(),
+  remove: jest.fn(),
   children: []
 } as unknown as THREE.Scene;
 
 const mockCamera = {
   position: new THREE.Vector3(0, 0, 5000),
-  updateProjectionMatrix: vi.fn()
+  updateProjectionMatrix: jest.fn()
 } as unknown as THREE.Camera;
 
 describe('PlanetarySystemManager - Core Architecture', () => {
   let planetaryManager: PlanetarySystemManager;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    jest.clearAllMocks();
     mockCamera.position.set(0, 0, 5000);
   });
 
@@ -68,6 +68,7 @@ describe('PlanetarySystemManager - Core Architecture', () => {
       expect(planets.venus.isInitialized()).toBe(true);
       expect(planets.earth.isInitialized()).toBe(true);
       expect(planets.mars.isInitialized()).toBe(true);
+      expect(planets.earth.hasMoons()).toBe(true);
     });
   });
 
@@ -176,6 +177,39 @@ describe('PlanetarySystemManager - Core Architecture', () => {
       // Only Earth should be visible in Earth space context
       expect(planets.earth.isVisible()).toBe(true);
       expect(planets.mars.isVisible()).toBe(false);
+    });
+
+    test('should toggle moon visibility by scale context', () => {
+      const earth = planetaryManager.getPlanet('earth');
+      expect(earth).not.toBeNull();
+      if (!earth) return;
+
+      planetaryManager.updateForScale(ScaleContext.EARTH_LOCAL);
+      expect(earth.isMoonVisible()).toBe(false);
+
+      planetaryManager.updateForScale(ScaleContext.EARTH_SPACE);
+      expect(earth.isMoonVisible()).toBe(true);
+
+      planetaryManager.updateForScale(ScaleContext.SOLAR_SYSTEM);
+      expect(earth.isMoonVisible()).toBe(true);
+    });
+
+    test('should update moon orbital position over time', () => {
+      const earth = planetaryManager.getPlanet('earth');
+      expect(earth).not.toBeNull();
+      if (!earth) return;
+
+      planetaryManager.updateForScale(ScaleContext.EARTH_SPACE);
+      const initialMoonPosition = earth.getMoonPosition();
+      expect(initialMoonPosition).not.toBeNull();
+      if (!initialMoonPosition) return;
+
+      planetaryManager.advanceTime(86400 * 5);
+      const updatedMoonPosition = earth.getMoonPosition();
+      expect(updatedMoonPosition).not.toBeNull();
+      if (!updatedMoonPosition) return;
+
+      expect(updatedMoonPosition.distanceTo(initialMoonPosition)).toBeGreaterThan(1);
     });
 
     test('should adjust orbital path visibility based on scale', () => {

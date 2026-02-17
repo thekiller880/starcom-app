@@ -7,6 +7,8 @@
 
 // Import new Intel architecture types for enhanced integration
 import { ReliabilityRating } from '../../../models/Intel/Intel';
+import type { ClassificationLevel } from '../../../models/Intel/Classification';
+export { ClassificationLevel } from '../../../models/Intel/Classification';
 
 // --- Base Types ---
 
@@ -51,6 +53,10 @@ export interface IntelEntity extends BaseEntity {
   description: string;
   source: string;
   sourceUrl?: string;
+  /**
+   * Deprecated: retained only for backward compatibility. No clearance controls enforced.
+   */
+  classification?: ClassificationLevel;
   verified: boolean;
   verifiedBy?: string;
   verifiedAt?: string;
@@ -195,7 +201,6 @@ export interface CaseRecord extends BaseEntity {
   closedDate?: string;
   relatedEntities: string[]; // IDs of related intel entities
   relatedCases: string[]; // IDs of related cases
-  classification: ClassificationLevel;
   tags: string[];
   // Collaboration features
   collaborators: Collaborator[];
@@ -288,18 +293,6 @@ export enum ActivityAction {
 }
 
 // --- Enums ---
-
-/**
- * Classification levels for intelligence data
- */
-export enum ClassificationLevel {
-  UNCLASSIFIED = 'UNCLASSIFIED',
-  SENSITIVE = 'SENSITIVE',
-  CONFIDENTIAL = 'CONFIDENTIAL',
-  SECRET = 'SECRET',
-  TOP_SECRET = 'TOP_SECRET'
-}
-
 /**
  * Node types for intelligence graph entities
  */
@@ -382,7 +375,6 @@ export interface Attachment {
 export interface IntelQueryOptions {
   types?: string[];
   tags?: string[];
-  classification?: ClassificationLevel[];
   startDate?: string;
   endDate?: string;
   confidence?: {

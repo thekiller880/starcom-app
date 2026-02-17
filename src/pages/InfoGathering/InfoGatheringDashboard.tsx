@@ -3,7 +3,6 @@ import {
   Box, 
   Typography, 
   Paper, 
-  Grid, 
   Button, 
   Divider, 
   CircularProgress,
@@ -169,41 +168,49 @@ const InfoGatheringDashboard: React.FC = () => {
       </Paper>
       
       <Box sx={{ flex: 1, overflow: 'auto' }}>
-        <Grid container spacing={3}>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: '1fr',
+              sm: 'repeat(2, 1fr)',
+              md: 'repeat(3, 1fr)'
+            },
+            gap: 3
+          }}
+        >
           {filteredTools.map(tool => (
-            <Grid item xs={12} sm={6} md={4} key={tool.id}>
-              <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                <CardContent sx={{ flexGrow: 1 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <Box sx={{ 
-                      backgroundColor: 'primary.main', 
-                      borderRadius: '50%', 
-                      p: 1, 
-                      mr: 2,
-                      color: 'white'
-                    }}>
-                      {tool.icon}
-                    </Box>
-                    <Typography variant="h6" component="h2">
-                      {tool.title}
-                    </Typography>
+            <Card key={tool.id} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+              <CardContent sx={{ flexGrow: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                  <Box sx={{ 
+                    backgroundColor: 'primary.main', 
+                    borderRadius: '50%', 
+                    p: 1, 
+                    mr: 2,
+                    color: 'white'
+                  }}>
+                    {tool.icon}
                   </Box>
-                  <Typography variant="body2" color="text.secondary">
-                    {tool.description}
+                  <Typography variant="h6" component="h2">
+                    {tool.title}
                   </Typography>
-                </CardContent>
-                <CardActions>
-                  <Button size="small" color="primary">
-                    Launch Tool
-                  </Button>
-                  <Button size="small" color="secondary">
-                    Documentation
-                  </Button>
-                </CardActions>
-              </Card>
-            </Grid>
+                </Box>
+                <Typography variant="body2" color="text.secondary">
+                  {tool.description}
+                </Typography>
+              </CardContent>
+              <CardActions>
+                <Button size="small" color="primary">
+                  Launch Tool
+                </Button>
+                <Button size="small" color="secondary">
+                  Documentation
+                </Button>
+              </CardActions>
+            </Card>
           ))}
-        </Grid>
+        </Box>
       </Box>
     </Box>
   );

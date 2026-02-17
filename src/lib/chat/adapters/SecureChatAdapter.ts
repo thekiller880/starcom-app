@@ -187,8 +187,20 @@ export async function createSecureChatService(): Promise<SecureChatIntegrationSe
     } catch (importError) {
       // Fallback to a different import approach if dynamic import fails
       logger.warn('Dynamic import failed, trying alternative approach', importError);
-      // Use eval for legacy code requiring the module if dynamic import fails
-      SecureChatIntegrationService = eval('require')('../../../services/SecureChatIntegrationService').SecureChatIntegrationService;
+      const legacyRequire = (globalThis as unknown as { require?: (id: string) => unknown }).require;
+      if (typeof legacyRequire !== 'function') {
+        throw importError;
+      }
+
+      const legacyModule = legacyRequire('../../../services/SecureChatIntegrationService') as {
+        SecureChatIntegrationService?: typeof import('../../../services/SecureChatIntegrationService').SecureChatIntegrationService;
+      };
+
+      if (!legacyModule?.SecureChatIntegrationService) {
+        throw new Error('Legacy require path did not expose SecureChatIntegrationService');
+      }
+
+      SecureChatIntegrationService = legacyModule.SecureChatIntegrationService;
     }
     
     return SecureChatIntegrationService.getInstance();

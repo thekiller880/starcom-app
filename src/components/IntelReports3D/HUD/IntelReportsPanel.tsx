@@ -3,10 +3,13 @@
  * Integrates with the LeftSideBar to provide quick access to Intel Reports 3D functionality
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useIntelReports3D } from '../../../hooks/intelligence/useIntelReports3D';
 import { useIntelContextAdapter } from '../../../hooks/intelligence/useIntelContextAdapter';
 import { IntelCategory, IntelPriority } from '../../../models/Intel/IntelEnums';
+import { GeoIntStatusPill } from './GeoIntStatusPill';
+import { GeoIntFilters, RecencyOption } from './GeoIntFilters';
+import { useGeoIntIngest } from '../../../hooks/useGeoIntIngest';
 import styles from './IntelReportsPanel.module.css';
 
 interface IntelReportsPanelProps {
@@ -14,6 +17,8 @@ interface IntelReportsPanelProps {
   isCollapsed?: boolean;
   /** Callback when a report is selected */
   onReportSelect?: (reportId: string) => void;
+  /** Optional hover callback for globe/list sync */
+  onReportHover?: (reportId: string | null) => void;
   /** Callback when panel wants to expand/collapse */
   onToggleCollapse?: () => void;
   /** Custom CSS class */
@@ -27,21 +32,72 @@ interface IntelReportsPanelProps {
 export const IntelReportsPanel: React.FC<IntelReportsPanelProps> = ({
   isCollapsed = false,
   onReportSelect,
+  onReportHover,
   onToggleCollapse,
   className = ''
 }) => {
   const [activeFilter, setActiveFilter] = useState<IntelCategory | 'all'>('all');
   const [priorityFilter, setPriorityFilter] = useState<IntelPriority | 'all'>('all');
+  const [riskFilter, setRiskFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
+  const [recency, setRecency] = useState<RecencyOption>('any');
+  const [relayWhitelist, setRelayWhitelist] = useState<string[]>([]);
+  const [sourceTag, setSourceTag] = useState('');
+  const [searchText, setSearchText] = useState('');
+  const [sortMode, setSortMode] = useState<'recency' | 'severity'>('recency');
 
   // Hook integrations
   const {
     intelReports,
+    filteredReports: serviceFilteredReports,
     loading,
     error,
     metrics,
     refreshIntelReports,
-    addIntelReport
+    addIntelReport,
+    setFilters
   } = useIntelReports3D();
+
+  const { relays } = useGeoIntIngest({ autoStart: true });
+
+  const relayOptions = useMemo(() => relays.map(r => ({ url: r.url, connected: r.connected })), [relays]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const recencyParam = params.get('geointRecency');
+    if (recencyParam) {
+      setRecency(recencyParam === 'any' ? 'any' : (Number(recencyParam) as RecencyOption));
+    }
+    const riskParam = params.get('geointRisk') as 'all' | 'high' | 'medium' | 'low' | null;
+    if (riskParam) setRiskFilter(riskParam);
+    const relayParam = params.get('geointRelays');
+    if (relayParam) setRelayWhitelist(relayParam.split(',').filter(Boolean));
+    const sourceParam = params.get('geointSource');
+    if (sourceParam) setSourceTag(sourceParam);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    params.set('geointRecency', String(recency));
+    params.set('geointRisk', riskFilter);
+    params.set('geointRelays', relayWhitelist.join(','));
+    if (sourceTag) params.set('geointSource', sourceTag); else params.delete('geointSource');
+    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    window.history.replaceState({}, '', newUrl);
+  }, [recency, riskFilter, relayWhitelist, sourceTag]);
+
+  useEffect(() => {
+    const timeRange = recency === 'any'
+      ? undefined
+      : { start: new Date(Date.now() - recency * 60_000), end: new Date() };
+    setFilters({
+      timeRange,
+      riskLevels: riskFilter === 'all' ? undefined : [riskFilter],
+      relayWhitelist: relayWhitelist.length ? relayWhitelist : undefined,
+      sourceTag: sourceTag || undefined
+    });
+  }, [recency, riskFilter, relayWhitelist, sourceTag, setFilters]);
 
   const {
     context,
@@ -49,16 +105,45 @@ export const IntelReportsPanel: React.FC<IntelReportsPanelProps> = ({
   } = useIntelContextAdapter();
 
   // Filter reports based on active filters
-  const filteredReports = useMemo(() => {
+  const visibleReports = useMemo(() => {
     if (!intelReports) return [];
 
-    return intelReports.filter(report => {
+    const base = serviceFilteredReports && serviceFilteredReports.length ? serviceFilteredReports : intelReports;
+    const priorityRank: Record<IntelPriority | 'critical', number> = {
+      critical: 5,
+      high: 4,
+      medium: 3,
+      low: 2,
+      background: 1
+    };
+
+    const filtered = base.filter(report => {
       const category = report.metadata?.category as IntelCategory | undefined;
       const categoryMatch = activeFilter === 'all' || (!!category && category === activeFilter);
+      if (!categoryMatch) return false;
+
       const priorityMatch = priorityFilter === 'all' || report.visualization.priority === priorityFilter;
-      return categoryMatch && priorityMatch;
+      if (!priorityMatch) return false;
+
+      if (searchText.trim()) {
+        const haystack = `${report.title} ${(report.metadata?.tags || []).join(' ')}`.toLowerCase();
+        if (!haystack.includes(searchText.trim().toLowerCase())) return false;
+      }
+
+      return true;
     });
-  }, [intelReports, activeFilter, priorityFilter]);
+
+    return filtered.sort((a, b) => {
+      if (sortMode === 'severity') {
+        const aRank = priorityRank[(a.visualization.priority as IntelPriority) || 'background'] || 0;
+        const bRank = priorityRank[(b.visualization.priority as IntelPriority) || 'background'] || 0;
+        return bRank - aRank;
+      }
+      const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return bTime - aTime;
+    });
+  }, [intelReports, serviceFilteredReports, activeFilter, priorityFilter, searchText, sortMode]);
 
   // Priority color mapping
   const getPriorityColor = useCallback((priority: IntelPriority): string => {
@@ -89,6 +174,10 @@ export const IntelReportsPanel: React.FC<IntelReportsPanelProps> = ({
   const handleReportClick = useCallback((reportId: string) => {
     onReportSelect?.(reportId);
   }, [onReportSelect]);
+
+  const handleReportHover = useCallback((reportId: string | null) => {
+    onReportHover?.(reportId);
+  }, [onReportHover]);
 
   // Handle quick actions
   const handleQuickAction = useCallback(async (action: string) => {
@@ -201,6 +290,11 @@ export const IntelReportsPanel: React.FC<IntelReportsPanelProps> = ({
             </>
           )}
         </div>
+        {!isCollapsed && (
+          <div className={styles.headerActions}>
+            <GeoIntStatusPill />
+          </div>
+        )}
       </div>
 
       {/* Context Selector */}
@@ -257,9 +351,40 @@ export const IntelReportsPanel: React.FC<IntelReportsPanelProps> = ({
         </div>
       )}
 
+      {/* GEOINT Filters */}
+      {!isCollapsed && (
+        <GeoIntFilters
+          recency={recency}
+          onRecencyChange={setRecency}
+          risk={riskFilter}
+          onRiskChange={setRiskFilter}
+          relays={relayOptions}
+          selectedRelays={relayWhitelist}
+          onRelaysChange={setRelayWhitelist}
+          sourceTag={sourceTag}
+          onSourceTagChange={setSourceTag}
+        />
+      )}
+
       {/* Filters */}
       {!isCollapsed && (
         <div className={styles.filters}>
+          <div className={styles.searchRow}>
+            <input
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              placeholder="Search title or tags"
+              className={styles.searchInput}
+            />
+            <select
+              value={sortMode}
+              onChange={(e) => setSortMode(e.target.value as 'recency' | 'severity')}
+              className={styles.filterSelect}
+            >
+              <option value="recency">Sort: Recency</option>
+              <option value="severity">Sort: Severity</option>
+            </select>
+          </div>
           <div className={styles.filterGroup}>
             <label className={styles.filterLabel}>Type:</label>
             <select
@@ -296,12 +421,12 @@ export const IntelReportsPanel: React.FC<IntelReportsPanelProps> = ({
 
       {/* Report List */}
       <div className={styles.reportList}>
-        {filteredReports.length === 0 ? (
+        {visibleReports.length === 0 ? (
           <div className={styles.emptyState}>
             {!isCollapsed && <span>No reports found</span>}
           </div>
         ) : (
-          filteredReports.slice(0, isCollapsed ? 3 : 10).map(report => {
+          visibleReports.slice(0, isCollapsed ? 3 : 10).map(report => {
             const category = (report.metadata?.category as IntelCategory | undefined) ?? 'cyber_threat';
 
             return (
@@ -309,6 +434,8 @@ export const IntelReportsPanel: React.FC<IntelReportsPanelProps> = ({
                 key={report.id}
                 className={styles.reportItem}
                 onClick={() => handleReportClick(report.id)}
+                onMouseEnter={() => handleReportHover(report.id)}
+                onMouseLeave={() => handleReportHover(null)}
                 title={isCollapsed ? report.title : undefined}
               >
                 <div className={styles.reportHeader}>

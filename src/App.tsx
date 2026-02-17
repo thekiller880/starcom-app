@@ -5,6 +5,7 @@ import { WASMProvider, useWASM } from "./context/WASMContext";
 import { DashboardProvider } from "./context/DashboardContext";
 import { GlobeProvider } from "./context/GlobeContext.tsx";
 import { VisualizationModeProvider } from "./context/VisualizationModeContext";
+import { VisualizationOverlayProvider } from "./context/VisualizationOverlayContext";
 import { MarketplaceProvider } from "./context/MarketplaceContext";
 import { SpaceWeatherProvider } from "./context/SpaceWeatherContext";
 import { UnifiedGlobalCommandProvider } from "./context/UnifiedGlobalCommandContext";
@@ -121,8 +122,8 @@ const AppContent: React.FC = () => {
   return (
     <>
       <SettingsInitializer />
-  <RouterProvider>
-  <ApplicationRouterProvider>
+    <RouterProvider>
+    <ApplicationRouterProvider>
           <AnalyticsTracker />
           <RouteSynchronizer />
           <AppRoutes />
@@ -139,41 +140,41 @@ const AppContent: React.FC = () => {
 
 const App: React.FC = () => (
   <QueryClientProvider client={queryClient}>
-    <PopupProvider>
-      <PreloaderManager minimumDisplayTime={2500}>
-        <ErrorBoundary>
-            <WASMProvider>
-              <DashboardProvider>
-                <VisualizationModeProvider>
-                  <GlobeProvider>
-                    <SpaceWeatherProvider>
-                      <MarketplaceProvider>
-                        <UnifiedGlobalCommandProvider>
-                          <InvestigationProvider>
-                            <GlobalGlobeContextMenuProvider>
-                              <RightSideBarProvider>
-                                <ViewProvider>
-                                  <div data-testid="app-root">
-                                    <AppContent />
-                                    {/* Mount tertiary space weather mode layers (placeholders) */}
-                                    <SpaceWeatherModeLayers />
-                                    {/* Support drive funnel (post-load, gated by flag) */}
-                                    <SupportFunnelRoot />
-                                  </div>
-                                </ViewProvider>
-                              </RightSideBarProvider>
-                            </GlobalGlobeContextMenuProvider>
-                          </InvestigationProvider>
-                        </UnifiedGlobalCommandProvider>
-                      </MarketplaceProvider>
-                    </SpaceWeatherProvider>
-                  </GlobeProvider>
-                </VisualizationModeProvider>
-              </DashboardProvider>
-            </WASMProvider>
-          </ErrorBoundary>
-      </PreloaderManager>
-    </PopupProvider>
+    <PreloaderManager minimumDisplayTime={2500}>
+      <ErrorBoundary>
+          <WASMProvider>
+            <DashboardProvider>
+              <VisualizationModeProvider>
+                <GlobeProvider>
+                  <SpaceWeatherProvider>
+                    <MarketplaceProvider>
+                      <UnifiedGlobalCommandProvider>
+                        <InvestigationProvider>
+                          <GlobalGlobeContextMenuProvider>
+                            <RightSideBarProvider>
+                              <ViewProvider>
+                                <VisualizationOverlayProvider>
+                                  <PopupProvider>
+                                    <div data-testid="app-root">
+                                      <AppContent />
+                                      <SpaceWeatherModeLayers />
+                                      <SupportFunnelRoot />
+                                    </div>
+                                  </PopupProvider>
+                                </VisualizationOverlayProvider>
+                              </ViewProvider>
+                            </RightSideBarProvider>
+                          </GlobalGlobeContextMenuProvider>
+                        </InvestigationProvider>
+                      </UnifiedGlobalCommandProvider>
+                    </MarketplaceProvider>
+                  </SpaceWeatherProvider>
+                </GlobeProvider>
+              </VisualizationModeProvider>
+            </DashboardProvider>
+          </WASMProvider>
+        </ErrorBoundary>
+    </PreloaderManager>
   </QueryClientProvider>
 );
 

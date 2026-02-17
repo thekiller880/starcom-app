@@ -43,10 +43,34 @@ interface IntelItemInternal {
   modifiedAt: string;
 }
 
+interface WorkspacePersistenceStats {
+  saveRequests: number;
+  flushCount: number;
+  immediateFlushCount: number;
+  pendingReschedules: number;
+  lastFlushAt: number | null;
+  lastSerializedBytes: number;
+  pendingTimerActive: boolean;
+  pendingDirty: boolean;
+}
+
 export class IntelWorkspaceManager {
   private state: WorkspaceStateV1 | null = null;
   private listeners = new Set<() => void>();
   private initializing = false;
+  private pendingSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingSaveDirty = false;
+  private readonly saveDebounceMs = 300;
+  private persistenceStats: WorkspacePersistenceStats = {
+    saveRequests: 0,
+    flushCount: 0,
+    immediateFlushCount: 0,
+    pendingReschedules: 0,
+    lastFlushAt: null,
+    lastSerializedBytes: 0,
+    pendingTimerActive: false,
+    pendingDirty: false
+  };
 
   private notify() { this.listeners.forEach(l => l()); }
 
@@ -59,9 +83,56 @@ export class IntelWorkspaceManager {
     try { return JSON.parse(raw) as WorkspaceStateV1; } catch { return null; }
   }
 
-  private saveState() {
+  private flushStateToStorage() {
+    if (typeof window === 'undefined' || !this.state || !this.pendingSaveDirty) return;
+
+    const payload = JSON.stringify(this.state);
+    localStorage.setItem(WORKSPACE_KEY_V1, payload);
+    this.pendingSaveDirty = false;
+
+    this.persistenceStats.flushCount += 1;
+    this.persistenceStats.lastFlushAt = Date.now();
+    this.persistenceStats.lastSerializedBytes = payload.length;
+    this.persistenceStats.pendingDirty = false;
+  }
+
+  private saveState(options?: { immediate?: boolean }) {
     if (typeof window === 'undefined' || !this.state) return;
-    localStorage.setItem(WORKSPACE_KEY_V1, JSON.stringify(this.state));
+
+    this.persistenceStats.saveRequests += 1;
+    this.pendingSaveDirty = true;
+    this.persistenceStats.pendingDirty = true;
+
+    if (options?.immediate) {
+      if (this.pendingSaveTimer) {
+        clearTimeout(this.pendingSaveTimer);
+        this.pendingSaveTimer = null;
+        this.persistenceStats.pendingTimerActive = false;
+      }
+      this.persistenceStats.immediateFlushCount += 1;
+      this.flushStateToStorage();
+      return;
+    }
+
+    if (this.pendingSaveTimer) {
+      this.persistenceStats.pendingReschedules += 1;
+      return;
+    }
+
+    this.pendingSaveTimer = setTimeout(() => {
+      this.pendingSaveTimer = null;
+      this.persistenceStats.pendingTimerActive = false;
+      this.flushStateToStorage();
+    }, this.saveDebounceMs);
+    this.persistenceStats.pendingTimerActive = true;
+  }
+
+  getPersistenceStats(): WorkspacePersistenceStats {
+    return {
+      ...this.persistenceStats,
+      pendingTimerActive: this.pendingSaveTimer !== null,
+      pendingDirty: this.pendingSaveDirty
+    };
   }
 
   async ensureInitialized(): Promise<void> {
@@ -84,7 +155,7 @@ export class IntelWorkspaceManager {
             packages: [],
             metadata: { createdAt: new Date().toISOString(), upgradedFrom: 'intermediate' }
           };
-          this.saveState();
+          this.saveState({ immediate: true });
           return;
         } catch {/* fallthrough */}
       }
@@ -137,7 +208,7 @@ export class IntelWorkspaceManager {
               packages: [],
               metadata: { createdAt: nowISO, upgradedFrom: 'legacy' }
             };
-            this.saveState();
+            this.saveState({ immediate: true });
             localStorage.setItem(MIGRATION_FLAG, 'true');
             return;
           } catch {/* ignore */}
@@ -152,7 +223,7 @@ export class IntelWorkspaceManager {
         packages: [],
         metadata: { createdAt: new Date().toISOString() }
       };
-      this.saveState();
+      this.saveState({ immediate: true });
     } finally {
       this.initializing = false;
     }

@@ -464,6 +464,7 @@ export const useIntelGlobeSync = (
     
     const updatePerformanceMetrics = () => {
       if (!globeServiceRef.current) return;
+      if (typeof document !== 'undefined' && document.hidden) return;
       
       const serviceMetrics = globeServiceRef.current.getPerformanceMetrics();
       const visibleMarkers = globeServiceRef.current.getVisibleMarkers();
@@ -482,9 +483,18 @@ export const useIntelGlobeSync = (
     updatePerformanceMetrics();
     
     // Set up periodic updates
-    const interval = setInterval(updatePerformanceMetrics, 1000);
+    const interval = setInterval(updatePerformanceMetrics, 3000);
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) return;
+      updatePerformanceMetrics();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [state.initialized]);
   
   // =============================================================================

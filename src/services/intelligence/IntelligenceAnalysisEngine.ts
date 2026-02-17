@@ -8,6 +8,7 @@
 import { Intel, ClassificationLevel } from '../../models/Intel/Intel';
 import { PrimaryIntelSource } from '../../models/Intel/Sources';
 import { enhancedEventEmitter } from '../../core/intel/events/enhancedEventEmitter';
+import { AnalysisContext, normalizeAnalysisContext } from './analysisContext';
 
 // =============================================================================
 // ANALYSIS TYPES AND INTERFACES
@@ -97,19 +98,6 @@ export interface ThreatIndicator {
   attributes: Record<string, unknown>;
 }
 
-export interface AnalysisContext {
-  focus_areas: string[];
-  time_range: { start: number; end: number };
-  geographic_scope?: { 
-    type: 'GLOBAL' | 'REGIONAL' | 'NATIONAL' | 'LOCAL' | 'SPECIFIC';
-    coordinates?: { latitude: number; longitude: number; radius: number }[];
-  };
-  priority_sources: PrimaryIntelSource[];
-  analysis_objectives: string[];
-  constraints: string[];
-  background_context: string;
-}
-
 // =============================================================================
 // INTELLIGENCE ANALYSIS ENGINE
 // =============================================================================
@@ -145,6 +133,7 @@ export class IntelligenceAnalysisEngine {
   ): Promise<AnalysisResult[]> {
     const results: AnalysisResult[] = [];
     const startTime = Date.now();
+    const normalizedContext = normalizeAnalysisContext(context);
 
     // Default to all analysis types enabled
     const analysisOptions = {
@@ -159,25 +148,25 @@ export class IntelligenceAnalysisEngine {
     try {
       enhancedEventEmitter.emit('analysis:started', {
         intel_count: intel.length,
-        context,
+        context: normalizedContext,
         options: analysisOptions
       });
 
       // 1. Pattern Detection Analysis
       if (analysisOptions.enable_pattern_detection) {
-        const patternResult = await this.performPatternDetection(intel, context);
+        const patternResult = await this.performPatternDetection(intel, normalizedContext);
         results.push(patternResult);
       }
 
       // 2. Threat Assessment Analysis
       if (analysisOptions.enable_threat_assessment) {
-        const threatResult = await this.performThreatAssessment(intel, context);
+        const threatResult = await this.performThreatAssessment(intel, normalizedContext);
         results.push(threatResult);
       }
 
       // 3. Correlation Analysis
       if (analysisOptions.enable_correlation_analysis) {
-        const correlationResult = await this.performCorrelationAnalysis(intel, context);
+        const correlationResult = await this.performCorrelationAnalysis(intel, normalizedContext);
         results.push(correlationResult);
       }
 

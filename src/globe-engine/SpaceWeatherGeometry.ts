@@ -4,11 +4,15 @@
 
 import * as THREE from 'three';
 import type { AuroraPayload, BowShockPayload, LatLng, MagnetopausePayload } from '../services/SpaceWeatherModeling';
+import { latLngToGlobeVector3 } from '../utils/globeCoordinates';
 
 const SHELL_WIDTH_SEGMENTS = 48; // keep under 5k verts with sphere geometry
 const SHELL_HEIGHT_SEGMENTS = 32;
-const DEFAULT_AURORA_ALTITUDE = 1.02; // relative to Earth radius
-const BLACKOUT_ALTITUDE = 1.015;
+const DEFORMED_SHELL_WIDTH_SEGMENTS = 72;
+const DEFORMED_SHELL_HEIGHT_SEGMENTS = 36;
+const GLOBE_RADIUS_UNITS = 100; // Matches Globe.gl sphere radius used across app
+const DEFAULT_AURORA_ALTITUDE_RE = 1.02; // Earth-radii altitude multiplier
+const BLACKOUT_ALTITUDE_RE = 1.015; // Earth-radii altitude multiplier
 const SHELL_VERTEX_CAP = 5000;
 export const AURORA_POINT_CAP = 512;
 
@@ -20,12 +24,13 @@ const COLORS = {
 };
 
 function buildShell(radius: number, color: THREE.Color, opacity: number): THREE.Mesh {
-  const geometry = new THREE.SphereGeometry(radius, SHELL_WIDTH_SEGMENTS, SHELL_HEIGHT_SEGMENTS);
+  const radiusUnits = radius * GLOBE_RADIUS_UNITS;
+  const geometry = new THREE.SphereGeometry(radiusUnits, SHELL_WIDTH_SEGMENTS, SHELL_HEIGHT_SEGMENTS);
   const material = new THREE.MeshPhongMaterial({
     color,
     transparent: true,
     opacity,
-    depthWrite: true,
+    depthWrite: false,
     depthTest: true,
     side: THREE.FrontSide,
     polygonOffset: true,
@@ -43,13 +48,124 @@ function buildShell(radius: number, color: THREE.Color, opacity: number): THREE.
   return mesh;
 }
 
+function computeDeformedShellRadiusRe(
+  fallbackRadiusRe: number,
+  theta: number,
+  phi: number,
+  deformation: MagnetopausePayload['deformation'] | BowShockPayload['deformation']
+): number {
+  if (!deformation) {
+    return fallbackRadiusRe;
+  }
+
+  const noseRe = Math.max(1, deformation.noseRe || fallbackRadiusRe);
+  const alpha = THREE.MathUtils.clamp(deformation.alpha || 0.6, 0.3, 1.2);
+  const denominator = Math.max(0.02, 1 + Math.cos(theta));
+  const shue = noseRe * Math.pow(2 / denominator, alpha);
+
+  const flankReference = noseRe * Math.pow(2 / (1 + Math.cos(Math.PI / 2)), alpha);
+  const flankTarget = Math.max(noseRe, deformation.flankRe || flankReference);
+  const flankScale = flankReference > 0 ? flankTarget / flankReference : 1;
+  const flankWeight = Math.pow(Math.sin(theta), 2);
+
+  const tailTarget = Math.max(flankTarget, deformation.tailRe || flankTarget * 1.4);
+  const tailWeight = THREE.MathUtils.clamp((theta - Math.PI / 2) / (Math.PI / 2), 0, 1);
+  const tailBlend = Math.pow(tailWeight, 1.35);
+
+  let radius = shue * THREE.MathUtils.lerp(1, flankScale, flankWeight);
+  radius = THREE.MathUtils.lerp(radius, tailTarget, tailBlend);
+
+  const lateralWeight = Math.sin(theta);
+  const dawnDuskTerm = (deformation.dawnDuskSkew || 0) * Math.sin(phi) * lateralWeight * 0.2;
+  const northSouthTerm = (deformation.northSouthSkew || 0) * Math.cos(phi) * lateralWeight * 0.16;
+  radius *= 1 + dawnDuskTerm + northSouthTerm;
+
+  return THREE.MathUtils.clamp(radius, 1, 80);
+}
+
+function buildDeformedShell(
+  radiusRe: number,
+  color: THREE.Color,
+  opacity: number,
+  deformation?: MagnetopausePayload['deformation'] | BowShockPayload['deformation']
+): THREE.Mesh {
+  if (!deformation) {
+    return buildShell(radiusRe, color, opacity);
+  }
+
+  const widthSegments = DEFORMED_SHELL_WIDTH_SEGMENTS;
+  const heightSegments = DEFORMED_SHELL_HEIGHT_SEGMENTS;
+  const vertices: number[] = [];
+  const indices: number[] = [];
+  const uvs: number[] = [];
+
+  for (let y = 0; y <= heightSegments; y++) {
+    const v = y / heightSegments;
+    const theta = v * Math.PI;
+
+    for (let x = 0; x <= widthSegments; x++) {
+      const u = x / widthSegments;
+      const phi = u * Math.PI * 2;
+      const shellRadiusRe = computeDeformedShellRadiusRe(radiusRe, theta, phi, deformation);
+      const shellRadiusUnits = shellRadiusRe * GLOBE_RADIUS_UNITS;
+
+      const sinTheta = Math.sin(theta);
+      const posX = shellRadiusUnits * Math.cos(theta);
+      const posY = shellRadiusUnits * sinTheta * Math.cos(phi);
+      const posZ = shellRadiusUnits * sinTheta * Math.sin(phi);
+
+      vertices.push(posX, posY, posZ);
+      uvs.push(u, v);
+    }
+  }
+
+  for (let y = 0; y < heightSegments; y++) {
+    for (let x = 0; x < widthSegments; x++) {
+      const a = y * (widthSegments + 1) + x;
+      const b = a + widthSegments + 1;
+      const c = b + 1;
+      const d = a + 1;
+
+      indices.push(a, b, d);
+      indices.push(b, c, d);
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  geometry.computeBoundingSphere();
+
+  const material = new THREE.MeshPhongMaterial({
+    color,
+    transparent: true,
+    opacity,
+    depthWrite: false,
+    depthTest: true,
+    side: THREE.FrontSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -2
+  });
+
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.renderOrder = 2;
+  mesh.rotation.y = THREE.MathUtils.degToRad(-(deformation.aberrationDeg || 0));
+
+  if (mesh.geometry.getAttribute('position').count > SHELL_VERTEX_CAP) {
+    console.warn('[SpaceWeather] deformed shell exceeded vertex cap', {
+      vertices: mesh.geometry.getAttribute('position').count,
+      cap: SHELL_VERTEX_CAP
+    });
+  }
+
+  return mesh;
+}
+
 function latLngToVector3(lat: number, lng: number, radius: number): THREE.Vector3 {
-  const phi = (90 - lat) * (Math.PI / 180);
-  const theta = (lng + 180) * (Math.PI / 180);
-  const x = radius * Math.sin(phi) * Math.cos(theta);
-  const y = radius * Math.cos(phi);
-  const z = radius * Math.sin(phi) * Math.sin(theta);
-  return new THREE.Vector3(x, y, z);
+  return latLngToGlobeVector3(lat, lng, radius);
 }
 
 function downsamplePolyline(points: LatLng[], cap: number, label: string): LatLng[] {
@@ -71,11 +187,12 @@ function downsamplePolyline(points: LatLng[], cap: number, label: string): LatLn
   return result;
 }
 
-function buildAuroraLine(points: LatLng[], color: THREE.Color, opacity: number, altitude = DEFAULT_AURORA_ALTITUDE): THREE.Line {
+function buildAuroraLine(points: LatLng[], color: THREE.Color, opacity: number, altitudeRe = DEFAULT_AURORA_ALTITUDE_RE): THREE.Line {
   const usable = downsamplePolyline(points, AURORA_POINT_CAP, 'aurora-line');
+  const altitudeUnits = altitudeRe * GLOBE_RADIUS_UNITS;
   const positions: number[] = [];
   usable.forEach((p) => {
-    const v = latLngToVector3(p.lat, p.lng, altitude);
+    const v = latLngToVector3(p.lat, p.lng, altitudeUnits);
     positions.push(v.x, v.y, v.z);
   });
   const geometry = new THREE.BufferGeometry();
@@ -99,8 +216,8 @@ function buildAuroraLine(points: LatLng[], color: THREE.Color, opacity: number, 
 function buildBlackoutBand(points: LatLng[], gradient: { inner: number; outer: number }): THREE.Mesh {
   // Build a triangle strip band between inner/outer altitude offsets using provided polyline.
   const usable = downsamplePolyline(points, AURORA_POINT_CAP, 'aurora-blackout');
-  const innerAlt = BLACKOUT_ALTITUDE + gradient.inner * 0.02;
-  const outerAlt = BLACKOUT_ALTITUDE + gradient.outer * 0.04;
+  const innerAlt = (BLACKOUT_ALTITUDE_RE + gradient.inner * 0.02) * GLOBE_RADIUS_UNITS;
+  const outerAlt = (BLACKOUT_ALTITUDE_RE + gradient.outer * 0.04) * GLOBE_RADIUS_UNITS;
   const vertices: number[] = [];
   const indices: number[] = [];
 
@@ -173,12 +290,12 @@ export function logVertexCount(
 
 export function createMagnetopauseMesh(payload: MagnetopausePayload): THREE.Mesh {
   const opacity = payload.quality === 'live' ? 0.4 : 0.3;
-  return buildShell(payload.standoffRe, COLORS.magnetopause, opacity);
+  return buildDeformedShell(payload.standoffRe, COLORS.magnetopause, opacity, payload.deformation);
 }
 
 export function createBowShockMesh(payload: BowShockPayload): THREE.Mesh {
   const opacity = payload.quality === 'live' ? 0.35 : 0.28;
-  return buildShell(payload.radiusRe, COLORS.bowShock, opacity);
+  return buildDeformedShell(payload.radiusRe, COLORS.bowShock, opacity, payload.deformation);
 }
 
 export function createAuroraLines(payload: AuroraPayload): { north: THREE.Line; south: THREE.Line } {

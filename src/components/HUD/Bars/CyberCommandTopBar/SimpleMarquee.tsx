@@ -24,7 +24,7 @@ const SimpleMarquee: React.FC<MarqueeProps> = ({
   const [contentWidth, setContentWidth] = useState(0);
 
   // Use simple drag scroll
-  const { dragHandlers, scrollOffset, isDragging } = useSimpleDragScroll();
+  const { dragHandlers, scrollOffset, isDragging, dragState } = useSimpleDragScroll();
 
   // Pause auto-scroll during interaction
   const handleMouseEnter = () => setIsPaused(true);
@@ -132,7 +132,7 @@ const SimpleMarquee: React.FC<MarqueeProps> = ({
         className={styles.marqueeContent}
         style={{ 
           transform: `translateX(${totalOffset}px)`,
-          transition: isDragging ? 'none' : 'transform 0.1s linear'
+          transition: (isDragging || !!dragState.momentumId || scrollOffset !== 0) ? 'none' : 'transform 0.1s linear'
         }}
       >
         {/* First copy */}

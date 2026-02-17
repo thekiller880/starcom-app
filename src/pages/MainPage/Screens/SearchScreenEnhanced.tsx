@@ -12,7 +12,6 @@ import {
   Tab,
   Menu,
   MenuItem,
-  Grid,
   List,
   ListItem,
   ListItemText,
@@ -23,7 +22,6 @@ import {
   Search, 
   Clock,
   ExternalLink,
-  Filter,
   TrendingUp,
   Eye,
   Shield,
@@ -39,10 +37,8 @@ import {
 } from 'lucide-react';
 
 // Import NetRunner search functionality
-import { useNetRunnerSearch } from '../../NetRunner/hooks/useNetRunnerSearch';
-import { SearchSource } from '../../NetRunner/types/netrunner';
-import FilterPanel from '../../NetRunner/components/FilterPanel';
-import EntityExtractor from '../../NetRunner/components/EntityExtractor';
+import { useNetRunnerSearch } from '../../../applications/netrunner/hooks/useNetRunnerSearch';
+import { SearchSource } from '../../../applications/netrunner/types/netrunner';
 
 /**
  * Enhanced SearchScreen with Right-Side Intelligence Panel
@@ -54,7 +50,6 @@ import EntityExtractor from '../../NetRunner/components/EntityExtractor';
 const SearchScreen: React.FC = () => {
   // State management
   const [activeTab, setActiveTab] = useState<number>(0);
-  const [showFilters, setShowFilters] = useState<boolean>(false);
   const [timeRange, setTimeRange] = useState<string>('all');
   const [searchHistoryAnchor, setSearchHistoryAnchor] = useState<null | HTMLElement>(null);
   
@@ -202,10 +197,6 @@ const SearchScreen: React.FC = () => {
         // Handle share
         console.log('Sharing search session...');
         break;
-      case 'advanced-search':
-        // Open advanced search
-        setShowFilters(true);
-        break;
       default:
         console.log(`Quick action: ${action}`);
     }
@@ -237,27 +228,28 @@ const SearchScreen: React.FC = () => {
         }}>
           OSINT Search Operations
         </Typography>
-        <Button 
-          variant="outlined"
-          startIcon={<Filter />}
-          onClick={() => setShowFilters(!showFilters)}
-          sx={{ 
-            borderColor: '#00ccff',
-            color: '#00ccff',
-            '&:hover': { 
-              borderColor: '#40d0ff',
-              backgroundColor: 'rgba(0, 204, 255, 0.1)' 
-            }
-          }}
-        >
-          {showFilters ? 'Hide Filters' : 'Show Filters'}
-        </Button>
       </Box>
 
       {/* Main Content Grid */}
-      <Grid container spacing={3} sx={{ flex: 1, overflow: 'hidden' }}>
-        {/* Left Column - Search Interface */}
-        <Grid item xs={12} md={8} sx={{ display: 'flex', flexDirection: 'column' }}>
+        <Box
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 3,
+            flex: 1,
+            overflow: 'hidden'
+          }}
+        >
+          {/* Left Column - Search Interface */}
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              flexBasis: { xs: '100%', md: '66%' },
+              flexGrow: 1,
+              minWidth: 0
+            }}
+          >
           {/* Search Interface */}
           <Paper elevation={3} sx={{ 
             p: 2, 
@@ -355,17 +347,7 @@ const SearchScreen: React.FC = () => {
             </Tabs>
           </Paper>
 
-          {/* Filters Panel */}
-          {showFilters && (
-            <FilterPanel 
-              filters={filters}
-              onFiltersChange={setFilters}
-              sources={sources}
-              onSourcesChange={setSources}
-              timeRange={timeRange}
-              onTimeRangeChange={setTimeRange}
-            />
-          )}
+          {/* Filters Panel removed in declassified build */}
 
           {/* Search Results */}
           <Box sx={{ flex: 1, overflow: 'auto' }}>
@@ -411,30 +393,21 @@ const SearchScreen: React.FC = () => {
               </Card>
             )}
 
-            {/* Entity Extraction */}
-            {searchResults.length > 0 && (
-              <EntityExtractor 
-                searchResults={searchResults}
-                onEntitiesExtracted={(entities) => {
-                  const newActivity = {
-                    id: `activity-${Date.now()}`,
-                    type: 'entity' as const,
-                    description: `${entities.length} entities extracted`,
-                    timestamp: new Date().toISOString()
-                  };
-                  setRecentActivity(prev => [newActivity, ...prev.slice(0, 9)]);
-                  setIntelligenceSummary(prev => ({
-                    ...prev,
-                    entitiesFound: prev.entitiesFound + entities.length
-                  }));
-                }}
-              />
-            )}
+            {/* Entity extraction removed in declassified build */}
           </Box>
-        </Grid>
+          </Box>
 
-        {/* Right Column - Intelligence Panel */}
-        <Grid item xs={12} md={4} sx={{ display: 'flex', flexDirection: 'column' }}>
+          {/* Right Column - Intelligence Panel */}
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              flexBasis: { xs: '100%', md: '32%' },
+              flexGrow: 1,
+              minWidth: 0,
+              gap: 3
+            }}
+          >
           {/* Intelligence Summary */}
           <Paper elevation={3} sx={{ 
             p: 2, 
@@ -452,48 +425,36 @@ const SearchScreen: React.FC = () => {
               Intelligence Summary
             </Typography>
             
-            <Grid container spacing={2}>
-              <Grid item xs={6}>
-                <Box sx={{ textAlign: 'center', p: 1 }}>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                gap: 2
+              }}
+            >
+              {[{
+                label: 'Searches',
+                value: intelligenceSummary.totalSearches
+              }, {
+                label: 'Entities',
+                value: intelligenceSummary.entitiesFound
+              }, {
+                label: 'Threats',
+                value: intelligenceSummary.threatsDetected
+              }, {
+                label: 'Sources',
+                value: intelligenceSummary.sourcesScanned
+              }].map((item) => (
+                <Box key={item.label} sx={{ textAlign: 'center', p: 1 }}>
                   <Typography variant="h4" sx={{ color: '#00ccff' }}>
-                    {intelligenceSummary.totalSearches}
+                    {item.value}
                   </Typography>
                   <Typography variant="caption" sx={{ color: 'rgba(224, 240, 255, 0.7)' }}>
-                    Searches
+                    {item.label}
                   </Typography>
                 </Box>
-              </Grid>
-              <Grid item xs={6}>
-                <Box sx={{ textAlign: 'center', p: 1 }}>
-                  <Typography variant="h4" sx={{ color: '#00ccff' }}>
-                    {intelligenceSummary.entitiesFound}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: 'rgba(224, 240, 255, 0.7)' }}>
-                    Entities
-                  </Typography>
-                </Box>
-              </Grid>
-              <Grid item xs={6}>
-                <Box sx={{ textAlign: 'center', p: 1 }}>
-                  <Typography variant="h4" sx={{ color: '#00ccff' }}>
-                    {intelligenceSummary.threatsDetected}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: 'rgba(224, 240, 255, 0.7)' }}>
-                    Threats
-                  </Typography>
-                </Box>
-              </Grid>
-              <Grid item xs={6}>
-                <Box sx={{ textAlign: 'center', p: 1 }}>
-                  <Typography variant="h4" sx={{ color: '#00ccff' }}>
-                    {intelligenceSummary.sourcesScanned}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: 'rgba(224, 240, 255, 0.7)' }}>
-                    Sources
-                  </Typography>
-                </Box>
-              </Grid>
-            </Grid>
+              ))}
+            </Box>
           </Paper>
 
           {/* Quick Actions */}
@@ -674,8 +635,8 @@ const SearchScreen: React.FC = () => {
               )}
             </List>
           </Paper>
-        </Grid>
-      </Grid>
+          </Box>
+        </Box>
 
       {/* History Menu */}
       <Menu

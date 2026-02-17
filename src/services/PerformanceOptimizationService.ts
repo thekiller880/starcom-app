@@ -76,18 +76,6 @@ export interface PerformanceTrend {
   significance: 'LOW' | 'MEDIUM' | 'HIGH';
 }
 
-// Cache management
-export interface CacheEntry<T = any> {
-  key: string;
-  value: T;
-  size: number; // bytes
-  created: Date;
-  lastAccessed: Date;
-  accessCount: number;
-  ttl: number; // seconds
-  compressed: boolean;
-}
-
 export interface CacheStats {
   totalEntries: number;
   totalSize: number; // bytes

@@ -2,8 +2,8 @@
 .topBar {
     position: absolute;
     top: 0;
-    left: 128px; /* Respect LeftSideBar width (128px) */
-    right: 120px; /* Leave space for RightSideBar (120px wide) */
+  left: 0;
+  right: 0;
     height: 48px;
     background: linear-gradient(90deg, #0f172a88 0%, #164e6388 100%);
     color: #e0f2fe;
@@ -143,8 +143,8 @@
       height: auto;
       padding: 8px 4px;
       font-size: 16px;
-      left: 110px; /* Maintain LeftSideBar respect */
-      right: 100px; /* Smaller right margin on smaller screens */
+      left: 0;
+      right: 0;
     }
     .logoSection {
       margin-right: 0; /* Remove extra margin in stacked layout */
@@ -159,7 +159,7 @@
 
   @media (max-width: 768px) {
     .topBar {
-      left: 100px; /* Match mobile LeftSideBar width */
-      right: 60px;
+      left: 0;
+      right: 0;
     }
   }

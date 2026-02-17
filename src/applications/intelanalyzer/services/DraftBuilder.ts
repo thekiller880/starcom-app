@@ -1,10 +1,10 @@
 import type { BoardState, PinnedItem } from '../state/BoardsTypes';
-import type { IntelReportUI, IntelClassification } from '../../../types/intel/IntelReportUI';
+import type { IntelReportUI, IntelReportClassification } from '../../../types/intel/IntelReportUI';
 import { encodeDeepLink, encodeFilters } from '../utils/deepLink';
 
 export interface DraftExportOptions {
   title: string;
-  classification: IntelClassification;
+  classification: IntelReportClassification;
   includeFilters?: boolean;
   includeWatchlists?: boolean;
   redactSensitive?: boolean;

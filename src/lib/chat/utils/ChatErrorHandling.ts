@@ -75,6 +75,27 @@ export function ensureChatError(error: unknown): ChatError {
   if (error instanceof Error && 'type' in error) {
     return error as ChatError;
   }
+
+  if (error !== null && typeof error === 'object' && 'type' in error && 'code' in error) {
+    const maybeError = error as Partial<ChatError> & Record<string, unknown>;
+    const chatError = createChatError(
+      typeof maybeError.message === 'string' ? maybeError.message : 'Unknown error',
+      (maybeError.type as ChatErrorType) ?? ChatErrorType.UNKNOWN,
+      typeof maybeError.code === 'string' ? maybeError.code : 'unknown',
+      typeof maybeError.recoverable === 'boolean' ? maybeError.recoverable : false,
+      maybeError.details,
+      maybeError.context
+    );
+
+    if (maybeError.name) {
+      chatError.name = String(maybeError.name);
+    }
+    if (maybeError.timestamp instanceof Date) {
+      chatError.timestamp = maybeError.timestamp;
+    }
+
+    return chatError;
+  }
   
   let message = 'Unknown error';
   if (error instanceof Error) {

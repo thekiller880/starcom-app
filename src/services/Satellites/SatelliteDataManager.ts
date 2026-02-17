@@ -3,6 +3,7 @@
 // Handles 21K+ CelesTrak satellites, selects ~100 for visualization
 
 import { SpaceAssetsDataProvider, CelesTrakTLE } from '../data-management/providers/SpaceAssetsDataProvider';
+import { latLngToGlobeVector3 } from '../../utils/globeCoordinates';
 
 export interface SatelliteData {
   id: string;
@@ -444,15 +445,14 @@ export class SatelliteDataManager {
   }
 
   private convertToCartesian(lat: number, lng: number, altitude: number): { x: number; y: number; z: number } {
-    const phi = (90 - lat) * (Math.PI / 180);
-    const theta = (lng + 180) * (Math.PI / 180);
     const earthRadius = 6371; // km
     const radius = earthRadius + altitude;
+    const point = latLngToGlobeVector3(lat, lng, radius);
 
     return {
-      x: radius * Math.sin(phi) * Math.cos(theta),
-      y: radius * Math.cos(phi),
-      z: radius * Math.sin(phi) * Math.sin(theta)
+      x: point.x,
+      y: point.y,
+      z: point.z
     };
   }
 

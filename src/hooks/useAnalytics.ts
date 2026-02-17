@@ -31,6 +31,9 @@ export const useSessionTracking = () => {
     
     // Track periodic engagement (every 30 seconds user is active)
     const engagementInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
       trackInvestorEvents.featureUsed('session_active');
     }, 30000);
 

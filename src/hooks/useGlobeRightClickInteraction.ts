@@ -9,12 +9,14 @@ import { useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { GlobeContextAction, GlobeContextActionData } from '../components/ui/GlobeContextMenu/GlobeContextMenu';
 import { useGlobalGlobeContextMenu } from '../context/GlobalGlobeContextMenuProvider';
+import { findPrimaryGlobeMesh, worldPointToGeoOnGlobe } from '../utils/globeSurfaceMapping';
 
 interface UseGlobeRightClickProps {
   globeRef: React.RefObject<{ 
     camera: () => THREE.Camera; 
     scene: () => THREE.Scene;
     getCoords?: (lat: number, lng: number) => THREE.Vector3;
+    toGeoCoords?: (point: { x: number; y: number; z: number }) => { lat: number; lng: number };
   }>;
   containerRef: React.RefObject<HTMLDivElement>;
   enabled?: boolean;
@@ -35,18 +37,17 @@ export function useGlobeRightClickInteraction({
   const globalContextMenu = useGlobalGlobeContextMenu();
   const raycasterRef = useRef<THREE.Raycaster>(new THREE.Raycaster());
   const mouseRef = useRef<THREE.Vector2>(new THREE.Vector2());
+  const globeMeshRef = useRef<THREE.Mesh | null>(null);
 
-  // Convert 3D world position to geographic coordinates
-  const worldToGeo = useCallback((worldPos: THREE.Vector3): { lat: number; lng: number } => {
-    // Normalize the world position to get it on the unit sphere
-    const normalized = worldPos.clone().normalize();
-    
-    // Convert Cartesian coordinates to spherical (lat/lng)
-    // Note: This assumes the globe is centered at origin with radius ~100
-    const lat = Math.asin(normalized.y) * (180 / Math.PI);
-    const lng = Math.atan2(normalized.x, normalized.z) * (180 / Math.PI);
-    
-    return { lat, lng };
+  const resolveGlobeMesh = useCallback((scene: THREE.Scene): THREE.Mesh | null => {
+    const cached = globeMeshRef.current;
+    if (cached && cached.parent) {
+      return cached;
+    }
+
+    const found = findPrimaryGlobeMesh(scene);
+    globeMeshRef.current = found;
+    return found;
   }, []);
 
   // Raycast against globe surface to find intersection point
@@ -70,46 +71,30 @@ export function useGlobeRightClickInteraction({
     mouseRef.current.set(x, y);
     raycasterRef.current.setFromCamera(mouseRef.current, camera);
 
-    // Find intersections with all objects in the scene
-    const intersects = raycasterRef.current.intersectObjects(scene.children, true);
+    const globeMesh = resolveGlobeMesh(scene);
+    if (!globeMesh) {
+      return null;
+    }
+
+    // Find intersections with the primary globe mesh only
+    const intersects = raycasterRef.current.intersectObject(globeMesh, true);
     
     console.log(`🔍 Raycasting found ${intersects.length} intersections`);
     
-    // Look for the first intersection that represents the globe surface
-    // This typically would be a sphere mesh representing the Earth
-    for (const intersect of intersects) {
-      console.log('🎯 Checking intersection:', {
-        type: intersect.object.type,
-        name: intersect.object.name,
-        geometry: intersect.object instanceof THREE.Mesh ? intersect.object.geometry?.type : 'N/A',
-        distance: intersect.distance
-      });
-      
-      // Skip if it's not a mesh or if it's too small (likely UI element)
-      if (!intersect.object || intersect.object.type !== 'Mesh') continue;
-      
-      // Check if this looks like a globe mesh (reasonable size sphere)
-      const mesh = intersect.object as THREE.Mesh;
-      if (mesh.geometry && 
-          (mesh.geometry.type === 'SphereGeometry' || 
-           mesh.geometry.type === 'SphereBufferGeometry' ||
-           mesh.name?.toLowerCase().includes('globe') ||
-           mesh.name?.toLowerCase().includes('earth'))) {
-        
-        console.log('🌍 Found globe mesh:', mesh.name || 'unnamed');
-        
-        const worldPoint = intersect.point;
-        const geoCoordinates = worldToGeo(worldPoint);
-        
-        return {
-          point: worldPoint,
-          geoCoordinates
-        };
-      }
+    if (intersects.length > 0) {
+      const worldPoint = intersects[0].point;
+      const geoCoordinates = typeof globeObj.toGeoCoords === 'function'
+        ? globeObj.toGeoCoords(worldPoint)
+        : worldPointToGeoOnGlobe(worldPoint, globeMesh);
+
+      return {
+        point: worldPoint,
+        geoCoordinates
+      };
     }
 
     return null;
-  }, [globeRef, worldToGeo]);
+  }, [globeRef, resolveGlobeMesh]);
 
   // Handle context menu action
   const handleContextAction = useCallback((

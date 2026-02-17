@@ -24,6 +24,9 @@ export const useGlobeSolarSystemIntegration = ({
   const animationFrameRef = useRef<number>();
   const managerRef = useRef<SolarSystemManager | null>(null);
   const onStateChangeRef = useRef<typeof onStateChange>();
+  const earthCenterRef = useRef(new THREE.Vector3(0, 0, 0));
+  const lastSampleTimeRef = useRef(0);
+  const lastDistanceRef = useRef<number | null>(null);
 
   useEffect(() => {
     onStateChangeRef.current = onStateChange;
@@ -134,22 +137,42 @@ export const useGlobeSolarSystemIntegration = ({
   useEffect(() => {
     if (!managerRef.current || !globeRef.current) return;
 
+    const SAMPLE_MS = 120;
+    const MIN_DISTANCE_DELTA = 0.25;
+
     const updateCameraDistance = () => {
       try {
+        if (typeof document !== 'undefined' && document.hidden) {
+          return;
+        }
+
+        const now = performance.now();
+        if (now - lastSampleTimeRef.current < SAMPLE_MS) {
+          return;
+        }
+        lastSampleTimeRef.current = now;
+
         const globe = globeRef.current;
         if (!globe || typeof globe.camera !== 'function') return;
         
         const camera = globe.camera();
         if (!camera || !camera.position) return;
         
-        const earthCenter = new THREE.Vector3(0, 0, 0);
-        const distance = camera.position.distanceTo(earthCenter);
+        const distance = camera.position.distanceTo(earthCenterRef.current);
         
         // Add safety check for valid distance
         if (!isFinite(distance) || distance < 0) {
           console.warn('Invalid camera distance calculated:', distance);
           return;
         }
+
+        if (
+          lastDistanceRef.current !== null &&
+          Math.abs(distance - lastDistanceRef.current) < MIN_DISTANCE_DELTA
+        ) {
+          return;
+        }
+        lastDistanceRef.current = distance;
         
         managerRef.current?.updateScale(distance);
       } catch (error) {

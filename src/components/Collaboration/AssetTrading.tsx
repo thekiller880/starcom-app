@@ -149,8 +149,8 @@ const AssetDetail: React.FC<AssetDetailProps> = ({
               <span className={styles.metaValue}>{asset.sourceAgency}</span>
             </div>
             <div className={styles.metaItem}>
-              <span className={styles.metaLabel}>Classification</span>
-              <span className={styles.metaValue}>{asset.classification}</span>
+              <span className={styles.metaLabel}>Validation</span>
+              <span className={styles.metaValue}>{asset.validationStatus}</span>
             </div>
             <div className={styles.metaItem}>
               <span className={styles.metaLabel}>File Size</span>
@@ -451,7 +451,7 @@ export const AssetTrading: React.FC<AssetTradingProps> = ({
                 
                 <div className={styles.assetCardMeta}>
                   <span className={styles.sourceAgency}>{asset.sourceAgency}</span>
-                  <span className={styles.classification}>{asset.classification}</span>
+                  <span className={styles.classification}>{asset.validationStatus}</span>
                 </div>
               </div>
               

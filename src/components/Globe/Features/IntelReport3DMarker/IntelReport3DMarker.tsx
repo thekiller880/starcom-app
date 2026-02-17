@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { IntelReportOverlayMarker } from '../../../../interfaces/IntelReportOverlay';
 import { assetLoader } from '../../../../utils/assetLoader';
 import { disposeGLTF } from '../../../../utils/disposeGLTF';
+import { latLngToGlobeVector3 } from '../../../../utils/globeCoordinates';
 
 // Import GLB asset using Vite's asset handling for static deployment compatibility
 import intelReportModelUrl from '../../../../assets/models/intel_report-01d.glb?url';
@@ -67,18 +68,6 @@ const IntelReport3DMarker: React.FC<IntelReport3DMarkerProps> = ({
     loadModel();
   }, [scale]);
 
-  // Convert lat/lng to 3D position on sphere
-  const latLngToVector3 = (lat: number, lng: number, radius: number): THREE.Vector3 => {
-    const phi = (90 - lat) * (Math.PI / 180);
-    const theta = (lng + 180) * (Math.PI / 180);
-    
-    const x = -(radius * Math.sin(phi) * Math.cos(theta));
-    const z = radius * Math.sin(phi) * Math.sin(theta);
-    const y = radius * Math.cos(phi);
-    
-    return new THREE.Vector3(x, y, z);
-  };
-
   // Create model instances for each Intel Report
   useEffect(() => {
     if (!gltfModel || !reports.length) {
@@ -92,12 +81,7 @@ const IntelReport3DMarker: React.FC<IntelReport3DMarkerProps> = ({
       // Clone the loaded model
       const mesh = gltfModel.clone(true);
       
-      // Calculate position on globe surface
-      const basePosition = latLngToVector3(
-        report.latitude, 
-        report.longitude, 
-        globeRadius + hoverAltitude
-      );
+      const basePosition = latLngToGlobeVector3(report.latitude, report.longitude, globeRadius + hoverAltitude);
       
       // Position the model
       mesh.position.copy(basePosition);

@@ -9,6 +9,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
 import { RealTimeAttackService } from '../../../services/CyberAttacks/RealTimeAttackService';
 import { useCyberCommandSettings } from '../../../hooks/useCyberCommandSettings';
+import { latLngToGlobeVector3 } from '../../../utils/globeCoordinates';
 import type { 
   CyberAttackData, 
   AttackStreamEvent, 
@@ -43,28 +44,16 @@ const AttackTrajectory: React.FC<AttackTrajectoryProps> = ({
   // Convert lat/long to 3D coordinates
   const source3D = useMemo(() => {
     const { latitude, longitude } = attack.trajectory.source;
-    const phi = (90 - latitude) * (Math.PI / 180);
-    const theta = (longitude + 180) * (Math.PI / 180);
     const radius = globeRadius * 1.02; // Slightly above surface
-    
-    return new THREE.Vector3(
-      radius * Math.sin(phi) * Math.cos(theta),
-      radius * Math.cos(phi),
-      radius * Math.sin(phi) * Math.sin(theta)
-    );
+
+    return latLngToGlobeVector3(latitude, longitude, radius);
   }, [attack.trajectory.source, globeRadius]);
 
   const target3D = useMemo(() => {
     const { latitude, longitude } = attack.trajectory.target;
-    const phi = (90 - latitude) * (Math.PI / 180);
-    const theta = (longitude + 180) * (Math.PI / 180);
     const radius = globeRadius * 1.02;
-    
-    return new THREE.Vector3(
-      radius * Math.sin(phi) * Math.cos(theta),
-      radius * Math.cos(phi),
-      radius * Math.sin(phi) * Math.sin(theta)
-    );
+
+    return latLngToGlobeVector3(latitude, longitude, radius);
   }, [attack.trajectory.target, globeRadius]);
 
   // Create trajectory curve
@@ -443,15 +432,9 @@ export const CyberAttacksVisualization: React.FC<GlobeVisualizationProps> = ({
 
   // Convert lat/lng to 3D position
   const getGlobePosition = useCallback((latitude: number, longitude: number, offset = 0) => {
-    const phi = (90 - latitude) * (Math.PI / 180);
-    const theta = (longitude + 180) * (Math.PI / 180);
     const radius = globeRadius + offset;
-    
-    return new THREE.Vector3(
-      radius * Math.sin(phi) * Math.cos(theta),
-      radius * Math.cos(phi),
-      radius * Math.sin(phi) * Math.sin(theta)
-    );
+
+    return latLngToGlobeVector3(latitude, longitude, radius);
   }, [globeRadius]);
 
   // Filter attacks based on settings

@@ -18,7 +18,7 @@ export { IntelReportPackageManager } from './services/IntelReportPackageManager'
 export * from './models/IntelReportData';
 
 // New unified architecture (specific exports to avoid conflicts)
-export { 
+export type { 
   IntelReportMetadata,
   IntelReportConverter,
   MemorySafetyManager,
@@ -34,7 +34,6 @@ export { IntelPackageExamples } from './examples/IntelReportPackageExamples';
 export type {
   // Core package types
   IntelReportPackage,
-  IntelReport,
   CreatePackageOptions,
   LoadPackageOptions,
   PackageValidationResult,

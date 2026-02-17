@@ -161,12 +161,12 @@ describe('CyberCommandDataService', () => {
       });
     });
 
-    test('should generate valid network infrastructure data', () => {
-      const data = MockDataGenerator.generateNetworkInfrastructure(2);
+    test('should generate valid satellites data', () => {
+      const data = MockDataGenerator.generateSatellites(2);
       
       expect(data).toHaveLength(2);
       data.forEach(item => {
-        expect(item.type).toBe('NetworkInfrastructure');
+        expect(item.type).toBe('Satellites');
         expect(item.metadata.infraType).toBeTruthy();
         expect(item.metadata.capacity).toBeTruthy();
         expect(['active', 'inactive', 'pending', 'resolved']).toContain(item.status);

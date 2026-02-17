@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import styles from './PopupManager.module.css';
 
@@ -9,6 +9,7 @@ interface Popup {
   zIndex?: number;
   backdrop?: boolean;
   onClose?: () => void;
+  restoreFocusTo?: HTMLElement | null;
 }
 
 interface PopupContextValue {
@@ -37,10 +38,15 @@ export const PopupProvider: React.FC<PopupProviderProps> = ({ children }) => {
 
   const showPopup = useCallback((popupData: Omit<Popup, 'id'>) => {
     const id = `popup_${Date.now()}_${Math.random()}`;
+    const restoreFocusTo = typeof document !== 'undefined' && document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+
     const popup: Popup = {
       id,
       zIndex: 3000 + popups.size, // Higher than floating panels
       backdrop: true,
+      restoreFocusTo,
       ...popupData,
     };
 
@@ -55,6 +61,11 @@ export const PopupProvider: React.FC<PopupProviderProps> = ({ children }) => {
       if (popup?.onClose) {
         popup.onClose();
       }
+
+      if (popup?.restoreFocusTo && typeof popup.restoreFocusTo.focus === 'function') {
+        popup.restoreFocusTo.focus();
+      }
+
       newMap.delete(id);
       return newMap;
     });
@@ -70,6 +81,29 @@ export const PopupProvider: React.FC<PopupProviderProps> = ({ children }) => {
   }, [popups]);
 
   const activePopups = Array.from(popups.values());
+
+  useEffect(() => {
+    if (activePopups.length === 0) {
+      return;
+    }
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') {
+        return;
+      }
+
+      const topmostPopup = activePopups[activePopups.length - 1];
+      if (!topmostPopup) {
+        return;
+      }
+
+      event.preventDefault();
+      hidePopup(topmostPopup.id);
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [activePopups, hidePopup]);
 
   const contextValue: PopupContextValue = {
     showPopup,

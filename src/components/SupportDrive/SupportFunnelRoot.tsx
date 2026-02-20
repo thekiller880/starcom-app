@@ -44,7 +44,6 @@ const LEARN_BODY = (
 );
 
 const SupportFunnelRoot: React.FC = () => {
-  const supportOpsDisabled = true;
   const config = useMemo(() => getSupportFunnelConfig(), []);
   const { eligible, markImpression, markSnooze, markDismiss, markAction } = useSupportFunnelState(config);
   const { sessionId, variant } = useMemo(() => getExperimentContext(config), [config]);
@@ -66,12 +65,6 @@ const SupportFunnelRoot: React.FC = () => {
   const devWarning = isDevLike && (disableFund || disableNostr)
     ? 'Support funnel URLs missing: check VITE_SUPPORT_FUNNEL_FUND_URL / VITE_SUPPORT_FUNNEL_NOSTR_URL.'
     : null;
-
-  useEffect(() => {
-    if (eligible && !sessionClosed && !open) {
-      setOpen(true);
-    }
-  }, [eligible, sessionClosed, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -189,7 +182,7 @@ const SupportFunnelRoot: React.FC = () => {
   };
 
   // If feature disabled, render nothing
-  if (supportOpsDisabled || !config.enabled) {
+  if (!config.enabled) {
     return null;
   }
 
